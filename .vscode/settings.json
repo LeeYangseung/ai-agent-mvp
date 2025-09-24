@@ -1,0 +1,26 @@
+{
+    "editor.formatOnSave": true,
+    "flake8.args": [
+        "--ignore=E402,F401,W503"
+    ],
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUndefinedVariable": "none"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "black-formatter.args": [
+        "--line-length",
+        "79"
+    ],
+    "python.analysis.typeCheckingMode": "basic",
+    "python.testing.pytestArgs": [
+        "app/tests/"
+    ],
+    "python.testing.cwd": "${workspaceFolder}/src",
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.defaultInterpreterPath": "./src/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.envFile": "${workspaceFolder}/src/.env",
+}
