@@ -1,22 +1,24 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Dict, Optional
 from langchain_openai import ChatOpenAI
+from langchain.schema.runnable import Runnable
 
 
-class BaseNode(ABC):
-    """모든 노드의 공통 추상 클래스"""
-
+class BaseNode(Runnable):
     def __init__(
         self,
-        node_id: str,
-        params: Dict[str, Any],
+        input_key: str,
+        output_key: str,
+        template: str = "",
+        variables: Dict[str, Any] = None,
         llm: Optional[ChatOpenAI] = None,
     ):
-        self.node_id = node_id
-        self.params = params
-        self.llm = llm
+        self.input_key = input_key
+        self.output_key = output_key
+        self.template = template
+        self.variables = variables or {}
+        self.llm = llm  # 외부에서 주입
 
     @abstractmethod
-    async def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """노드 실행"""
+    def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
         pass

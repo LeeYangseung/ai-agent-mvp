@@ -1,18 +1,36 @@
+from typing import Dict, Any, Optional
+from langchain_openai import ChatOpenAI
 from .base import BaseNode
 from langchain.prompts import ChatPromptTemplate
 
 
 class PromptNode(BaseNode):
-    """단순 프롬프트 실행 노드"""
+    """프롬프트 실행 노드"""
 
-    async def run(self, context):
-        if not self.llm:
-            raise ValueError("LLM이 제공되지 않았습니다.")
-        template = self.params.get("template", "Hello {name}")
-        variables = self.params.get("variables", {})
+    def __init__(
+        self,
+        input_key: str,
+        output_key: str,
+        template: str = "",
+        variables: Dict[str, Any] = None,
+        llm: Optional[ChatOpenAI] = None,
+    ):
+        super().__init__(input_key, output_key, template, variables, llm)
 
-        prompt = ChatPromptTemplate.from_template(template)
+    def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
+        if self.llm is None:
+            raise ValueError("LLM instance is required but not provided.")
+
+        # 1. input_key를 기준으로 state에서 꺼냄
+        input_val = state.get(self.input_key, "")
+        input_vars = {**self.variables, self.input_key: input_val}
+
+        # 2. 프롬프트 생성 및 실행
+        prompt = ChatPromptTemplate.from_template(self.template)
         chain = prompt | self.llm
-        result = await chain.ainvoke(variables)
+        result = chain.invoke(input_vars)
 
-        return {"output": result.content}
+        # 3. output_key에 저장
+        new_state = dict(state)
+        new_state[self.output_key] = result.content
+        return new_state

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from app.schemas.graph import GraphRequest
 from app.core.graph_runner import run_graph
 from app.core.logging import get_logger
 from app.core.deps import get_llm
@@ -7,11 +7,6 @@ from app.core.deps import get_llm
 logger = get_logger("app")
 
 router = APIRouter()
-
-
-class GraphRequest(BaseModel):
-    nodes: list
-    edges: list
 
 
 @router.post("/run-graph")

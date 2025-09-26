@@ -1,34 +1,91 @@
 from typing import Dict, Any
+from langgraph.graph import StateGraph, START, END
 from app.nodes.prompt_node import PromptNode
-from langchain_openai import ChatOpenAI
 
-NODE_REGISTRY = {
-    "PromptNode": PromptNode,
-}
+# TODO: RAGNode, AlertNode도 같은 방식으로 구현
 
 
-async def run_graph(
-    graph_def: Dict[str, Any], llm: ChatOpenAI
-) -> Dict[str, Any]:
+async def run_graph(graph_json: Dict[str, Any], llm):
     """
-    graph_def 예시:
+    graph_json 예시:
     {
       "nodes": [
         {
           "id": "n1",
           "type": "PromptNode",
-          "params": {"template": "Hello {name}", "variables": {"name":"Alice"}}
+          "params": {
+            "template": "Rephrase the question: {question}"
+          },
+          "input_key": "question",
+          "output_key": "query"
+        },
+        {
+          "id": "n2",
+          "type": "RAGNode",
+          "params": {},
+          "input_key": "query",
+          "output_key": "context"
+        },
+        {
+          "id": "n3",
+          "type": "PromptNode",
+          "params": {
+            "template": "Answer the question: {question}\nContext: {context}"
+          },
+          "input_key": "context",
+          "output_key": "output"
         }
       ],
-      "edges": []
+      "edges": [
+        {"source": "n1", "target": "n2"},
+        {"source": "n2", "target": "n3"}
+      ],
+      "input_state": {
+        "question": "서울 날씨 어때?"
+      }
     }
     """
-    results = {}
+    nodes = graph_json.get("nodes", [])
+    edges = graph_json.get("edges", [])
+    input_state = graph_json.get("input_state", {})
 
-    for node_def in graph_def["nodes"]:
-        node_type = node_def["type"]
-        node_class = NODE_REGISTRY[node_type]
-        node = node_class(node_def["id"], node_def["params"], llm=llm)
-        results[node.node_id] = await node.run(results)
+    workflow = StateGraph(dict)
+    node_map = {}
 
-    return results
+    # 1. 노드 생성
+    for node in nodes:
+        node_id = node["id"]
+        node_type = node["type"]
+        params = node.get("params", {})
+        input_key = node.get("input_key", "input")
+        output_key = node.get("output_key", "output")
+
+        if node_type == "PromptNode":
+            node_impl = PromptNode(
+                input_key=input_key, output_key=output_key, llm=llm, **params
+            )
+        # elif node_type == "RAGNode":
+        #     node_impl = RAGNode(input_key=input_key, output_key=output_key, llm=llm, **params)
+        # elif node_type == "AlertNode":
+        #     node_impl = AlertNode(input_key=input_key, output_key=output_key, **params)
+        else:
+            raise ValueError(f"Unknown node type: {node_type}")
+
+        workflow.add_node(node_id, node_impl)
+        node_map[node_id] = node_impl
+
+    # 2. 엣지 연결
+    for edge in edges:
+        workflow.add_edge(edge["source"], edge["target"])
+
+    # 시작/끝 연결
+    if nodes:
+        workflow.add_edge(START, nodes[0]["id"])
+    workflow.add_edge(nodes[-1]["id"], END)
+
+    # 3. 컴파일
+    app = workflow.compile()
+
+    # 4. 실행 (초기 state = 사용자 입력)
+    final_state = await app.ainvoke(input_state)
+    return final_state
