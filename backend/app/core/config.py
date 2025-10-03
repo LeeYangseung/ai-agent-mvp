@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     log_file_path: str = "logs/app/app.log"
 
     openai_secret_key: str
+    vector_store_data_dir: str = "data/index"
 
     root_path: str = ""
     openapi_url: str = ""

@@ -9,7 +9,8 @@ from alembic import context
 
 # Import all models for autogenerate to work properly
 from app.database.models.base import Base
-from app.database.models import User, Organization, Role
+from app.database.models.rag.document import Document
+from app.database.models.rag.chunk import Chunk
 
 
 # this is the Alembic Config object, which provides

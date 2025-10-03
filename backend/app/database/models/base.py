@@ -5,6 +5,7 @@ from sqlalchemy import (
     DateTime,
     func,
     CHAR,
+    String,
 )
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 import re
@@ -45,11 +46,11 @@ class CustomModelBase:
     created_at = Column(
         DateTime, default=func.current_timestamp(), comment="생성일"
     )
-    created_by = Column(CHAR(36), comment="생성자")
+    created_by = Column(String, comment="생성자")
     updated_at = Column(
         DateTime, default=func.current_timestamp(), comment="수정일"
     )
-    updated_by = Column(CHAR(36), comment="수정자")
+    updated_by = Column(String, comment="수정자")
 
 
 metadata = MetaData(naming_convention=convention)

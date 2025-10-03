@@ -31,3 +31,6 @@ share/python-wheels/
 # app logs
 *.log
 *.log.*
+
+# app data
+backend/app/data/*
