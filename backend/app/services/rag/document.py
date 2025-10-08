@@ -244,9 +244,11 @@ async def update_document(
             raise NotFoundError()
 
         # chunks 정보를 별도로 저장
-        chunks_data = document.chunks
+        chunks_data = getattr(document, "chunks", None)
         # chunks를 제외한 document 객체 생성
-        document_dict = document.model_dump(exclude={"chunks"})
+        document_dict = document.model_dump(
+            exclude={"chunks"}, exclude_unset=True
+        )
         document_without_chunks = DocumentUpdateRequest(**document_dict)
 
         db_document = await document_crud.update_document(

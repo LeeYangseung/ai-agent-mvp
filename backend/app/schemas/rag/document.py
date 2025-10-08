@@ -43,12 +43,12 @@ class DocumentCreateRequest(DocumentBase):
 
 
 class DocumentUpdateRequest(DocumentBase):
-    name: Optional[str]
-    path: Optional[str]
+    name: Optional[str] = None
+    path: Optional[str] = None
     chunk_size: Optional[int] = None
     overlap_size: Optional[int] = None
     method: Optional[str] = None
-    status: Optional[DocumentStatus]
+    status: Optional[DocumentStatus] = None
     updated_by: Optional[str] = "admin"
     updated_at: Optional[datetime] = datetime.now()
 

@@ -12,8 +12,8 @@ root_router = APIRouter()
 # v1 router setup
 router = APIRouter(prefix="/v1")
 router.include_router(graph_router, prefix="/graph", tags=["그래프"])
-router.include_router(chunk_router, prefix="/chunk", tags=["청크"])
-router.include_router(document_router, prefix="/document", tags=["문서"])
+router.include_router(chunk_router, prefix="/chunks", tags=["청크"])
+router.include_router(document_router, prefix="/documents", tags=["문서"])
 
 
 @router.get("/health")
