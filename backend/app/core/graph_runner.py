@@ -1,8 +1,9 @@
 from typing import Dict, Any
 from langgraph.graph import StateGraph, START, END
 from app.nodes.prompt_node import PromptNode
+from app.nodes.retrieval_node import RetrievalNode
 
-# TODO: RAGNode, AlertNode도 같은 방식으로 구현
+# TODO: RetrievalNode, AlertNode도 같은 방식으로 구현
 
 
 async def run_graph(graph_json: Dict[str, Any], llm):
@@ -21,7 +22,7 @@ async def run_graph(graph_json: Dict[str, Any], llm):
         },
         {
           "id": "n2",
-          "type": "RAGNode",
+          "type": "RetrievalNode",
           "params": {},
           "input_key": "query",
           "output_key": "context"
@@ -59,13 +60,22 @@ async def run_graph(graph_json: Dict[str, Any], llm):
         params = node.get("params", {})
         input_key = node.get("input_key", "input")
         output_key = node.get("output_key", "output")
+        k = node.get("k", 4)
 
         if node_type == "PromptNode":
             node_impl = PromptNode(
-                input_key=input_key, output_key=output_key, llm=llm, **params
+                input_key=input_key,
+                output_key=output_key,
+                llm=llm,
+                **params,
             )
-        # elif node_type == "RAGNode":
-        #     node_impl = RAGNode(input_key=input_key, output_key=output_key, llm=llm, **params)
+        elif node_type == "RetrievalNode":
+            node_impl = RetrievalNode(
+                input_key=input_key,
+                output_key=output_key,
+                k=k,
+                **params,
+            )
         # elif node_type == "AlertNode":
         #     node_impl = AlertNode(input_key=input_key, output_key=output_key, **params)
         else:

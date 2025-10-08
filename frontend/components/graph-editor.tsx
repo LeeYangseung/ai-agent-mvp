@@ -14,6 +14,7 @@ import "reactflow/dist/style.css";
 import BaseNode from "./node";
 import { runGraph } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { GraphSnippet, graphSnippets } from "./graph-snippet";
 
 const nodeTypes = { BaseNode };
 
@@ -97,19 +98,50 @@ function ChatPanel({
   );
 }
 
+
 // ------------------------------------------------------------
 // 사이드바 컴포넌트
 // ------------------------------------------------------------
-function NodeSidebar({ onAddNode }: { onAddNode: (type: string) => void }) {
+function NodeSidebar({ 
+  onAddNode, 
+  onAddRetrievalNode, 
+  onLoadSnippet 
+}: { 
+  onAddNode: () => void;
+  onAddRetrievalNode: () => void;
+  onLoadSnippet: (snippet: GraphSnippet) => void;
+}) {
   return (
     <div className="p-4 border-r bg-gray-50 w-64">
       <h3 className="font-bold mb-4">Nodes</h3>
       <Button
         className="w-full mb-2"
-        onClick={() => onAddNode("BaseNode")}
+        onClick={onAddNode}
       >
-        Add Node
+        Add Prompt Node
       </Button>
+      <Button
+        className="w-full mb-2"
+        onClick={onAddRetrievalNode}
+      >
+        Add Retrieval Node
+      </Button>
+      
+      <div className="mt-6">
+        <h3 className="font-bold mb-4">Snippets</h3>
+        <div className="space-y-2">
+          {graphSnippets.map((snippet, index) => (
+            <Button
+              key={index}
+              variant="outline"
+              className="w-full text-left justify-start"
+              onClick={() => onLoadSnippet(snippet)}
+            >
+              {snippet.name}
+            </Button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -121,13 +153,33 @@ export function GraphEditor() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const onConnect = useCallback(
-    (params: any) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
+    (params: any) => {
+      // 연결된 노드들의 키 매핑 처리
+      const sourceNode = nodes.find(n => n.id === params.source);
+      const targetNode = nodes.find(n => n.id === params.target);
+      
+      if (sourceNode && targetNode) {
+        // 소스 노드의 output_key를 타겟 노드의 input_key로 설정
+        if (sourceNode.data.output_key && sourceNode.data.output_key.trim() !== "") {
+          setNodes((nds) =>
+            nds.map((n) => 
+              n.id === params.target 
+                ? { ...n, data: { ...n.data, input_key: sourceNode.data.output_key } }
+                : n
+            )
+          );
+        }
+      }
+      
+      // 엣지 추가
+      setEdges((eds) => addEdge(params, eds));
+    },
+    [setEdges, setNodes, nodes]
   );
 
   const onAddNode = () => {
-    const template = "질문으로 만드세요 : {question}";
-    const variables = autoExtractVariables(template);
+    const template = "";
+    const variables: string[] = [];
   
     const newNode: Node = {
       id: `node-${nodes.length + 1}`,
@@ -137,11 +189,69 @@ export function GraphEditor() {
         nodeType: "PromptNode",
         template,
         variables,
-        input_key: "question", // 기본값
-        output_key: "output",  // 기본값
+        input_key: "", // placeholder
+        output_key: "",  // placeholder
       },
     };
     setNodes((nds) => [...nds, newNode]);
+  };
+
+  const onAddRetrievalNode = () => {
+    const newNode: Node = {
+      id: `node-${nodes.length + 1}`,
+      type: "BaseNode",
+      position: { x: Math.random() * 300 + 100, y: Math.random() * 300 + 100 },
+      data: {
+        nodeType: "RetrievalNode",
+        query: "",
+        top_k: "",
+        collection: "",
+        input_key: "query", // 기본값으로 query 설정
+        output_key: "",  // placeholder
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  };
+
+  // 스니펫 로드 함수
+  const onLoadSnippet = (snippet: GraphSnippet) => {
+    // 기존 노드와 엣지 초기화
+    setNodes([]);
+    setEdges([]);
+
+    // 스니펫의 노드들을 ReactFlow 노드 형태로 변환
+    const newNodes: Node[] = snippet.data.nodes.map((nodeData, index) => ({
+      id: nodeData.id,
+      type: "BaseNode",
+      position: { 
+        x: 100 + (index % 3) * 300, 
+        y: 100 + Math.floor(index / 3) * 200 
+      },
+      data: {
+        nodeType: nodeData.type,
+        input_key: nodeData.input_key,
+        output_key: nodeData.output_key,
+        // 노드 타입에 따른 데이터 설정
+        ...(nodeData.type === "PromptNode" ? {
+          template: nodeData.params.template,
+          variables: nodeData.params.variables,
+        } : nodeData.type === "RetrievalNode" ? {
+          query: nodeData.params.template || "",
+          top_k: "",
+          collection: "",
+        } : {})
+      }
+    }));
+
+    // 스니펫의 엣지들을 ReactFlow 엣지 형태로 변환
+    const newEdges = snippet.data.edges.map((edge, index) => ({
+      id: `edge-${index}`,
+      source: edge.source,
+      target: edge.target,
+    }));
+
+    setNodes(newNodes);
+    setEdges(newEdges);
   };
 
   // 유저가 메시지 입력했을 때 → 그래프 실행
@@ -150,25 +260,59 @@ export function GraphEditor() {
     setIsRunning(true);
   
     try {
+      // input_state를 동적으로 생성
+      const inputState: Record<string, string> = {};
+      
+      // 첫 번째 노드의 input_key에만 사용자 입력을 매핑
+      if (nodes.length > 0) {
+        const firstNode = nodes[0];
+        const inputKey = firstNode.data.input_key;
+        if (inputKey && inputKey.trim() !== "") {
+          inputState[inputKey] = userInput;
+        } else {
+          // input_key가 없는 경우 기본값으로 question 사용
+          inputState.question = userInput;
+        }
+      }
+      
       const graph = {
-        nodes: nodes.map((n) => ({
-          id: n.id,
-          type: n.data.nodeType || "PromptNode", // 실제 타입
-          params: {
-            template: n.data.template,
-            variables: n.data.variables,
-          },
-          input_key: n.data.input_key || "",
-          output_key: n.data.output_key || "",
-        })),
+        nodes: nodes.map((n) => {
+          const baseNode = {
+            id: n.id,
+            type: n.data.nodeType || "PromptNode",
+            input_key: n.data.input_key || "",
+            output_key: n.data.output_key || "",
+          };
+
+          // 노드 타입에 따른 params 설정
+          if (n.data.nodeType === "PromptNode") {
+            return {
+              ...baseNode,
+              params: {
+                template: n.data.template,
+                variables: n.data.variables,
+              },
+            };
+          } else if (n.data.nodeType === "RetrievalNode") {
+            return {
+              ...baseNode,
+              params: {
+                template: n.data.query, // query를 template으로 매핑
+                variables: {}, // RetrievalNode는 variables가 필요 없음
+                // collection: n.data.collection,
+              },
+              k: n.data.top_k,
+            };
+          }
+
+          return baseNode;
+        }),
         edges: edges.map((e) => ({
           id: e.id,
           source: e.source,
           target: e.target,
         })),
-        input_state: {
-          question: userInput, // ✅ 항상 사용자 입력을 question으로 전달
-        },
+        input_state: inputState,
       };
   
       const res = await runGraph(graph);
@@ -191,7 +335,11 @@ export function GraphEditor() {
 
   return (
     <div className="flex h-full">
-      <NodeSidebar onAddNode={onAddNode} />
+      <NodeSidebar 
+        onAddNode={onAddNode} 
+        onAddRetrievalNode={onAddRetrievalNode} 
+        onLoadSnippet={onLoadSnippet}
+      />
 
       <div className="flex-1 relative">
         <ReactFlow

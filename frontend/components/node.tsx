@@ -37,13 +37,16 @@ export default function BaseNode({ id, data }: NodeProps) {
           className="text-xs border rounded px-1"
         >
           <option value="PromptNode">Prompt Node</option>
+          <option value="RetrievalNode">Retrieval Node</option>
           {/* RAGNode, AlertNode 등 추가 가능 */}
         </select>
       </div>
 
       {/* input_key / output_key */}
       <div className="flex space-x-1 mb-2">
-        <label className="text-xs font-bold mr-2">input_key:</label>
+        <label className="text-xs font-bold mr-2">
+          {data?.nodeType === "RetrievalNode" ? "query:" : "input_key:"}
+        </label>
         <input
           value={data?.input_key || ""}
           onChange={(e) => updateNodeData({ input_key: e.target.value })}
@@ -87,7 +90,7 @@ export default function BaseNode({ id, data }: NodeProps) {
                     {key}
                   </span>
                   <input
-                    value={val}
+                    value={val as string}
                     onChange={(e) =>
                       updateNodeData({
                         variables: { ...data.variables, [key]: e.target.value },
@@ -98,6 +101,34 @@ export default function BaseNode({ id, data }: NodeProps) {
                   />
                 </div>
               ))}
+          </div>
+        </>
+      )}
+
+      {/* RetrievalNode UI */}
+      {data?.nodeType === "RetrievalNode" && (
+        <>
+          <div className="space-y-2">
+            <div>
+              <label className="text-xs font-bold mr-2">top_k:</label>
+              <input
+                value={data?.top_k || ""}
+                onChange={(e) => updateNodeData({ top_k: e.target.value })}
+                placeholder="상위 결과 개수"
+                type="number"
+                className="w-full border rounded p-1 text-xs"
+              />
+            </div>
+            
+            <div>
+              <label className="text-xs font-bold mr-2">collection:</label>
+              <input
+                value={data?.collection || ""}
+                onChange={(e) => updateNodeData({ collection: e.target.value })}
+                placeholder="컬렉션 이름(추가 예정)"
+                className="w-full border rounded p-1 text-xs"
+              />
+            </div>
           </div>
         </>
       )}
