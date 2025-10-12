@@ -9,6 +9,8 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   Node,
+  Edge,
+  MarkerType,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import BaseNode from "./node";
@@ -105,10 +107,14 @@ function ChatPanel({
 function NodeSidebar({ 
   onAddNode, 
   onAddRetrievalNode, 
+  onAddInputNode,
+  onAddOutputNode,
   onLoadSnippet 
 }: { 
   onAddNode: () => void;
   onAddRetrievalNode: () => void;
+  onAddInputNode: () => void;
+  onAddOutputNode: () => void;
   onLoadSnippet: (snippet: GraphSnippet) => void;
 }) {
   return (
@@ -116,15 +122,27 @@ function NodeSidebar({
       <h3 className="font-bold mb-4">Nodes</h3>
       <Button
         className="w-full mb-2"
+        onClick={onAddInputNode}
+      >
+        📥 Add Input Node
+      </Button>
+      <Button
+        className="w-full mb-2"
         onClick={onAddNode}
       >
-        Add Prompt Node
+        💬 Add Prompt Node
       </Button>
       <Button
         className="w-full mb-2"
         onClick={onAddRetrievalNode}
       >
-        Add Retrieval Node
+        🔍 Add Retrieval Node
+      </Button>
+      <Button
+        className="w-full mb-2"
+        onClick={onAddOutputNode}
+      >
+        📤 Add Output Node
       </Button>
       
       <div className="mt-6">
@@ -171,8 +189,21 @@ export function GraphEditor() {
         }
       }
       
-      // 엣지 추가
-      setEdges((eds) => addEdge(params, eds));
+      // 엣지 추가 (화살표 마커 포함)
+      const newEdge = {
+        ...params,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 15,
+          height: 15,
+          color: '#6b7280',
+        },
+        style: {
+          strokeWidth: 2,
+          stroke: '#6b7280',
+        },
+      };
+      setEdges((eds) => addEdge(newEdge, eds));
     },
     [setEdges, setNodes, nodes]
   );
@@ -184,7 +215,7 @@ export function GraphEditor() {
     const newNode: Node = {
       id: `node-${nodes.length + 1}`,
       type: "BaseNode",
-      position: { x: Math.random() * 300 + 100, y: Math.random() * 300 + 100 },
+      position: { x: 100 + nodes.length * 350, y: 200 },
       data: {
         nodeType: "PromptNode",
         template,
@@ -200,7 +231,7 @@ export function GraphEditor() {
     const newNode: Node = {
       id: `node-${nodes.length + 1}`,
       type: "BaseNode",
-      position: { x: Math.random() * 300 + 100, y: Math.random() * 300 + 100 },
+      position: { x: 100 + nodes.length * 350, y: 200 },
       data: {
         nodeType: "RetrievalNode",
         query: "",
@@ -208,6 +239,35 @@ export function GraphEditor() {
         collection: "",
         input_key: "query", // 기본값으로 query 설정
         output_key: "",  // placeholder
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  };
+
+  const onAddInputNode = () => {
+    const newNode: Node = {
+      id: `node-${nodes.length + 1}`,
+      type: "BaseNode",
+      position: { x: 100 + nodes.length * 350, y: 200 },
+      data: {
+        nodeType: "InputNode",
+        input_key: "", // InputNode는 input_key가 필요 없음
+        output_key: "user_input", // 기본값으로 user_input 설정
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  };
+
+  const onAddOutputNode = () => {
+    const newNode: Node = {
+      id: `node-${nodes.length + 1}`,
+      type: "BaseNode",
+      position: { x: 100 + nodes.length * 350, y: 200 },
+      data: {
+        nodeType: "OutputNode",
+        input_key: "answer", // 기본값으로 answer 설정
+        output_key: "final_output", // 기본값으로 final_output 설정
+        wrap_template: "AI의 답변입니다:\n{answer}", // 기본 템플릿
       },
     };
     setNodes((nds) => [...nds, newNode]);
@@ -224,15 +284,19 @@ export function GraphEditor() {
       id: nodeData.id,
       type: "BaseNode",
       position: { 
-        x: 100 + (index % 3) * 300, 
-        y: 100 + Math.floor(index / 3) * 200 
+        x: 100 + index * 350, 
+        y: 200 
       },
       data: {
         nodeType: nodeData.type,
         input_key: nodeData.input_key,
         output_key: nodeData.output_key,
         // 노드 타입에 따른 데이터 설정
-        ...(nodeData.type === "PromptNode" ? {
+        ...(nodeData.type === "InputNode" ? {
+          // InputNode는 특별한 데이터가 필요 없음
+        } : nodeData.type === "OutputNode" ? {
+          wrap_template: nodeData.params.wrap_template || "",
+        } : nodeData.type === "PromptNode" ? {
           template: nodeData.params.template,
           variables: nodeData.params.variables,
         } : nodeData.type === "RetrievalNode" ? {
@@ -243,11 +307,21 @@ export function GraphEditor() {
       }
     }));
 
-    // 스니펫의 엣지들을 ReactFlow 엣지 형태로 변환
+    // 스니펫의 엣지들을 ReactFlow 엣지 형태로 변환 (화살표 포함)
     const newEdges = snippet.data.edges.map((edge, index) => ({
       id: `edge-${index}`,
       source: edge.source,
       target: edge.target,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 15,
+        height: 15,
+        color: '#6b7280',
+      },
+      style: {
+        strokeWidth: 2,
+        stroke: '#6b7280',
+      },
     }));
 
     setNodes(newNodes);
@@ -263,8 +337,13 @@ export function GraphEditor() {
       // input_state를 동적으로 생성
       const inputState: Record<string, string> = {};
       
-      // 첫 번째 노드의 input_key에만 사용자 입력을 매핑
-      if (nodes.length > 0) {
+      // InputNode가 있는지 확인
+      const inputNode = nodes.find(n => n.data.nodeType === "InputNode");
+      if (inputNode) {
+        // InputNode가 있으면 "input" 키에 사용자 입력을 저장
+        inputState.input = userInput;
+      } else if (nodes.length > 0) {
+        // InputNode가 없으면 첫 번째 노드의 input_key에 사용자 입력을 매핑
         const firstNode = nodes[0];
         const inputKey = firstNode.data.input_key;
         if (inputKey && inputKey.trim() !== "") {
@@ -285,7 +364,19 @@ export function GraphEditor() {
           };
 
           // 노드 타입에 따른 params 설정
-          if (n.data.nodeType === "PromptNode") {
+          if (n.data.nodeType === "InputNode") {
+            return {
+              ...baseNode,
+              params: {},
+            };
+          } else if (n.data.nodeType === "OutputNode") {
+            return {
+              ...baseNode,
+              params: {
+                wrap_template: n.data.wrap_template || "",
+              },
+            };
+          } else if (n.data.nodeType === "PromptNode") {
             return {
               ...baseNode,
               params: {
@@ -311,6 +402,16 @@ export function GraphEditor() {
           id: e.id,
           source: e.source,
           target: e.target,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 15,
+            height: 15,
+            color: '#6b7280',
+          },
+          style: {
+            strokeWidth: 2,
+            stroke: '#6b7280',
+          },
         })),
         input_state: inputState,
       };
@@ -338,6 +439,8 @@ export function GraphEditor() {
       <NodeSidebar 
         onAddNode={onAddNode} 
         onAddRetrievalNode={onAddRetrievalNode} 
+        onAddInputNode={onAddInputNode}
+        onAddOutputNode={onAddOutputNode}
         onLoadSnippet={onLoadSnippet}
       />
 
