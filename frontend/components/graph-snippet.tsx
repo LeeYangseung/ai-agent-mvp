@@ -20,45 +20,60 @@ export type GraphSnippet = {
 // 미리 정의된 스니펫들
 export const graphSnippets: GraphSnippet[] = [
   {
-    name: "검색 그래프",
+    name: "기본 검색 그래프",
     data: {
       nodes: [
         {
-          id: "node-1",
-          type: "PromptNode",
-          params: {
-            template: "사용자 입력을 받아 검색을 위한 질문 형태로 변환하세요.\n## 사용자 입력\n{input}\n## 질문",
-            variables: { input: "" }
-          },
-          input_key: "input",
-          output_key: "query"
+          id: "input-1",
+          type: "InputNode",
+          params: {},
+          input_key: "",
+          output_key: "user_question"
         },
         {
-          id: "node-2",
-          type: "RetrievalNode",
+          id: "prompt-1",
+          type: "PromptNode",
           params: {
-            template: "",
-            variables: {}
+            template: "사용자 질문을 검색에 적합한 형태로 변환하세요:\n{user_question}",
+            variables: { user_question: "" }
           },
-          input_key: "query",
+          input_key: "user_question",
+          output_key: "search_query"
+        },
+        {
+          id: "retrieval-1",
+          type: "RetrievalNode",
+          params: {},
+          input_key: "search_query",
           output_key: "context"
         },
         {
-          id: "node-3",
+          id: "prompt-2",
           type: "PromptNode",
           params: {
-            template: "당신은 사용자 질문에 자세히 답변하는 도우미입니다.\n사용자 입력과 질문, 문맥을 참고해 답변하세요.\n\n## 사용자 입력\n{input}\n\n## 질문\n{query}\n\n## 문맥\n{context}\n\n## 답변",
-            variables: { input: "", query: "", context: "" }
+            template: "다음 정보를 바탕으로 사용자 질문에 답변하세요:\n\n질문: {user_question}\n\n참고 자료: {context}",
+            variables: { user_question: "", context: "" }
           },
           input_key: "context",
-          output_key: "output"
+          output_key: "answer"
+        },
+        {
+          id: "output-1",
+          type: "OutputNode",
+          params: {
+            wrap_template: "🤖 AI 답변:\n\n{answer}\n\n---\n질문: {user_question}"
+          },
+          input_key: "answer",
+          output_key: "final_output"
         }
       ],
       edges: [
-        { source: "node-1", target: "node-2" },
-        { source: "node-2", target: "node-3" }
+        { source: "input-1", target: "prompt-1" },
+        { source: "prompt-1", target: "retrieval-1" },
+        { source: "retrieval-1", target: "prompt-2" },
+        { source: "prompt-2", target: "output-1" }
       ],
-      input_state: { input: "해지환급금 기준 알려줘" }
+      input_state: { input: "보험 해지 시 환급금은 얼마나 받을 수 있나요?" }
     }
   }
 ];

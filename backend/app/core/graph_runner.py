@@ -2,6 +2,8 @@ from typing import Dict, Any
 from langgraph.graph import StateGraph, START, END
 from app.nodes.prompt_node import PromptNode
 from app.nodes.retrieval_node import RetrievalNode
+from app.nodes.input_node import InputNode
+from app.nodes.output_node import OutputNode
 
 # TODO: RetrievalNode, AlertNode도 같은 방식으로 구현
 
@@ -13,36 +15,54 @@ async def run_graph(graph_json: Dict[str, Any], llm):
       "nodes": [
         {
           "id": "n1",
-          "type": "PromptNode",
-          "params": {
-            "template": "Rephrase the question: {question}"
-          },
-          "input_key": "question",
-          "output_key": "query"
+          "type": "InputNode",
+          "params": {},
+          "output_key": "user_question"
         },
         {
           "id": "n2",
+          "type": "PromptNode",
+          "params": {
+            "template": "Rephrase the question: {user_question}"
+          },
+          "input_key": "user_question",
+          "output_key": "query"
+        },
+        {
+          "id": "n3",
           "type": "RetrievalNode",
           "params": {},
           "input_key": "query",
           "output_key": "context"
         },
         {
-          "id": "n3",
+          "id": "n4",
           "type": "PromptNode",
           "params": {
-            "template": "Answer the question: {question}\nContext: {context}"
+            "template": "Answer the question: {user_question}\n"
+                       "Context: {context}"
           },
           "input_key": "context",
-          "output_key": "output"
+          "output_key": "answer"
+        },
+        {
+          "id": "n5",
+          "type": "OutputNode",
+          "params": {
+            "wrap_template": "AI의 답변입니다:\n{answer}"
+          },
+          "input_key": "answer",
+          "output_key": "final_output"
         }
       ],
       "edges": [
         {"source": "n1", "target": "n2"},
-        {"source": "n2", "target": "n3"}
+        {"source": "n2", "target": "n3"},
+        {"source": "n3", "target": "n4"},
+        {"source": "n4", "target": "n5"}
       ],
       "input_state": {
-        "question": "서울 날씨 어때?"
+        "input": "서울 날씨 어때?"
       }
     }
     """
@@ -62,7 +82,18 @@ async def run_graph(graph_json: Dict[str, Any], llm):
         output_key = node.get("output_key", "output")
         k = node.get("k", 4)
 
-        if node_type == "PromptNode":
+        if node_type == "InputNode":
+            node_impl = InputNode(
+                output_key=output_key,
+                **params,
+            )
+        elif node_type == "OutputNode":
+            node_impl = OutputNode(
+                input_key=input_key,
+                output_key=output_key,
+                **params,
+            )
+        elif node_type == "PromptNode":
             node_impl = PromptNode(
                 input_key=input_key,
                 output_key=output_key,
@@ -77,7 +108,9 @@ async def run_graph(graph_json: Dict[str, Any], llm):
                 **params,
             )
         # elif node_type == "AlertNode":
-        #     node_impl = AlertNode(input_key=input_key, output_key=output_key, **params)
+        #     node_impl = AlertNode(
+        #         input_key=input_key, output_key=output_key, **params
+        #     )
         else:
             raise ValueError(f"Unknown node type: {node_type}")
 
