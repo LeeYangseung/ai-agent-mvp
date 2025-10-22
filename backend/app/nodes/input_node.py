@@ -7,12 +7,16 @@ class InputNode(BaseNode):
 
     def __init__(
         self,
-        output_key: str,
+        output: str = "user_input",
         input_data: Optional[Any] = None,
         **kwargs,
     ):
-        # InputNode는 input_key가 필요 없으므로 빈 문자열로 설정
-        super().__init__(input_key="", output_key=output_key, **kwargs)
+        """
+        Args:
+            output: 출력 키 (기본값: user_input, 프론트엔드와 일관성 유지)
+            input_data: 런타임에 주입할 입력 데이터 (선택적)
+        """
+        super().__init__(output=output, **kwargs)
         self.input_data = input_data
 
     def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
@@ -29,7 +33,7 @@ class InputNode(BaseNode):
         # 1. 기존 state 복사
         new_state = dict(state)
 
-        # 2. input_data가 있으면 사용, 없으면 state에서 input_key로 찾기
+        # 2. input_data가 있으면 사용, 없으면 state에서 "input" 키로 찾기
         if self.input_data is not None:
             input_value = self.input_data
         else:
@@ -37,8 +41,8 @@ class InputNode(BaseNode):
             # 일반적으로 "input" 키로 전달됨
             input_value = state.get("input", "")
 
-        # 3. output_key에 입력 데이터 저장
-        new_state[self.output_key] = input_value
+        # 3. output에 입력 데이터 저장 (기본: user_input)
+        new_state[self.output] = input_value
 
         return new_state
 

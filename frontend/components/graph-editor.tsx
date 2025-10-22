@@ -26,21 +26,6 @@ type ChatMessage = {
   content: string;
 };
 
-// {} 감싸진 변수 자동 추출
-function autoExtractVariables(template: string, currentVars: Record<string, string> = {}) {
-  const regex = /\{([^}]+)\}/g;
-  const matches = template.matchAll(regex);
-  const newVars: Record<string, string> = { ...currentVars };
-
-  for (const m of matches) {
-    const key = m[1].trim();
-    if (!(key in newVars)) {
-      newVars[key] = "";
-    }
-  }
-  return newVars;
-}
-
 // ------------------------------------------------------------
 // 채팅 UI
 // ------------------------------------------------------------
@@ -209,19 +194,17 @@ export function GraphEditor() {
   );
 
   const onAddNode = () => {
-    const template = "";
-    const variables: string[] = [];
-  
     const newNode: Node = {
       id: `node-${nodes.length + 1}`,
       type: "BaseNode",
       position: { x: 100 + nodes.length * 350, y: 200 },
       data: {
         nodeType: "PromptNode",
-        template,
-        variables,
-        input_key: "", // placeholder
-        output_key: "",  // placeholder
+        system_prompt: "",
+        user_prompt: "",
+        assistant_prompt: "",
+        inputs: {},
+        output: "answer",
       },
     };
     setNodes((nds) => [...nds, newNode]);
@@ -234,11 +217,12 @@ export function GraphEditor() {
       position: { x: 100 + nodes.length * 350, y: 200 },
       data: {
         nodeType: "RetrievalNode",
-        query: "",
-        top_k: "",
+        top_k: 4,
         collection: "",
-        input_key: "query", // 기본값으로 query 설정
-        output_key: "",  // placeholder
+        inputs: {
+          query: { type: "reference", value: "" }
+        },
+        output: "context",
       },
     };
     setNodes((nds) => [...nds, newNode]);
@@ -262,12 +246,15 @@ export function GraphEditor() {
     const newNode: Node = {
       id: `node-${nodes.length + 1}`,
       type: "BaseNode",
-      position: { x: 100 + nodes.length * 350, y: 200 },
+      position: { x: 100 + nodes.length + 350, y: 200 },
       data: {
         nodeType: "OutputNode",
-        input_key: "answer", // 기본값으로 answer 설정
-        output_key: "final_output", // 기본값으로 final_output 설정
-        wrap_template: "AI의 답변입니다:\n{answer}", // 기본 템플릿
+        wrap_template: "🤖 AI 답변:\n\n{answer}\n\n---\n질문: {user_input}",
+        inputs: {
+          answer: { type: "reference", value: "" },
+          user_input: { type: "reference", value: "" }
+        },
+        output: "agent_output",
       },
     };
     setNodes((nds) => [...nds, newNode]);
@@ -293,16 +280,22 @@ export function GraphEditor() {
         output_key: nodeData.output_key,
         // 노드 타입에 따른 데이터 설정
         ...(nodeData.type === "InputNode" ? {
-          // InputNode는 특별한 데이터가 필요 없음
+          output: "user_input",
         } : nodeData.type === "OutputNode" ? {
           wrap_template: nodeData.params.wrap_template || "",
+          inputs: nodeData.params.inputs || {},
+          output: "agent_output",
         } : nodeData.type === "PromptNode" ? {
-          template: nodeData.params.template,
-          variables: nodeData.params.variables,
+          system_prompt: nodeData.params.system_prompt || "",
+          user_prompt: nodeData.params.user_prompt || "",
+          assistant_prompt: nodeData.params.assistant_prompt || "",
+          inputs: nodeData.params.inputs || {},
+          output: nodeData.output_key || "answer",
         } : nodeData.type === "RetrievalNode" ? {
-          query: nodeData.params.template || "",
-          top_k: "",
-          collection: "",
+          top_k: nodeData.params.top_k || 4,
+          collection: nodeData.params.collection || "",
+          inputs: nodeData.params.inputs || {},
+          output: nodeData.output_key || "context",
         } : {})
       }
     }));
@@ -372,27 +365,32 @@ export function GraphEditor() {
           } else if (n.data.nodeType === "OutputNode") {
             return {
               ...baseNode,
+              output_key: "agent_output",
               params: {
                 wrap_template: n.data.wrap_template || "",
+                inputs: n.data.inputs || {},
               },
             };
           } else if (n.data.nodeType === "PromptNode") {
             return {
               ...baseNode,
+              output_key: n.data.output || n.data.output_key || "",
               params: {
-                template: n.data.template,
-                variables: n.data.variables,
+                system_prompt: n.data.system_prompt || "",
+                user_prompt: n.data.user_prompt || "",
+                assistant_prompt: n.data.assistant_prompt || "",
+                inputs: n.data.inputs || {},
               },
             };
           } else if (n.data.nodeType === "RetrievalNode") {
             return {
               ...baseNode,
+              output_key: n.data.output || n.data.output_key || "",
               params: {
-                template: n.data.query, // query를 template으로 매핑
-                variables: {}, // RetrievalNode는 variables가 필요 없음
-                // collection: n.data.collection,
+                top_k: n.data.top_k || 4,
+                collection: n.data.collection || "",
+                inputs: n.data.inputs || {},
               },
-              k: n.data.top_k,
             };
           }
 

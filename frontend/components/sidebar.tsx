@@ -21,7 +21,7 @@ export function Sidebar({ sidebarOpen, currentPage, setCurrentPage }: SidebarPro
           </div>
           {sidebarOpen && (
             <div>
-              <h1 className="font-semibold text-gray-800">AI Agent MVP</h1>
+              <h1 className="font-semibold text-gray-800">AI Agent</h1>
             </div>
           )}
         </div>

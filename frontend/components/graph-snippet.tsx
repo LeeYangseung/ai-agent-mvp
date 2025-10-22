@@ -28,43 +28,61 @@ export const graphSnippets: GraphSnippet[] = [
           type: "InputNode",
           params: {},
           input_key: "",
-          output_key: "user_question"
+          output_key: "user_input"
         },
         {
           id: "prompt-1",
           type: "PromptNode",
           params: {
-            template: "사용자 질문을 검색에 적합한 형태로 변환하세요:\n{user_question}",
-            variables: { user_question: "" }
+            system_prompt: "당신은 검색 쿼리를 최적화하는 AI입니다.",
+            user_prompt: "사용자 질문을 검색에 적합한 형태로 변환하세요:\n{user_input}",
+            assistant_prompt: "",
+            inputs: {
+              user_input: { type: "reference", value: "user_input" }
+            }
           },
-          input_key: "user_question",
+          input_key: "",
           output_key: "search_query"
         },
         {
           id: "retrieval-1",
           type: "RetrievalNode",
-          params: {},
-          input_key: "search_query",
+          params: {
+            top_k: 4,
+            collection: "",
+            inputs: {
+              query: { type: "reference", value: "search_query" }
+            }
+          },
+          input_key: "",
           output_key: "context"
         },
         {
           id: "prompt-2",
           type: "PromptNode",
           params: {
-            template: "다음 정보를 바탕으로 사용자 질문에 답변하세요:\n\n질문: {user_question}\n\n참고 자료: {context}",
-            variables: { user_question: "", context: "" }
+            system_prompt: "당신은 친절하고 정확한 답변을 제공하는 AI 어시스턴트입니다.",
+            user_prompt: "다음 정보를 바탕으로 사용자 질문에 답변하세요:\n\n질문: {user_input}\n\n참고 자료: {context}",
+            assistant_prompt: "",
+            inputs: {
+              user_input: { type: "reference", value: "user_input" },
+              context: { type: "reference", value: "context" }
+            }
           },
-          input_key: "context",
+          input_key: "",
           output_key: "answer"
         },
         {
           id: "output-1",
           type: "OutputNode",
           params: {
-            wrap_template: "🤖 AI 답변:\n\n{answer}\n\n---\n질문: {user_question}"
+            wrap_template: "🤖 AI 답변:\n\n{answer}",
+            inputs: {
+              answer: { type: "reference", value: "answer" }
+            }
           },
-          input_key: "answer",
-          output_key: "final_output"
+          input_key: "",
+          output_key: "agent_output"
         }
       ],
       edges: [

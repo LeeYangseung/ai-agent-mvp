@@ -1,5 +1,8 @@
 from typing import Dict, Any, Optional
 from .base import BaseNode
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class OutputNode(BaseNode):
@@ -7,13 +10,24 @@ class OutputNode(BaseNode):
 
     def __init__(
         self,
-        input_key: str,
+        output: str = "agent_output",
         wrap_template: Optional[str] = None,
-        output_key: str = "final_output",
+        inputs: Dict[str, Dict[str, str]] = None,
         **kwargs,
     ):
-        super().__init__(input_key=input_key, output_key=output_key, **kwargs)
-        self.wrap_template = wrap_template
+        """
+        Args:
+            output: 출력을 저장할 키 (기본값: agent_output)
+            wrap_template: 출력 포맷 템플릿
+            inputs: 템플릿에 사용할 변수들
+                   예: {"answer": {"type": "reference",
+                                   "value": "answer"},
+                        "user_input": {"type": "reference",
+                                       "value": "user_input"}}
+        """
+        super().__init__(output=output, **kwargs)
+        self.wrap_template = wrap_template or ""
+        self.inputs = inputs or {}
 
     def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
         """
@@ -29,29 +43,54 @@ class OutputNode(BaseNode):
         # 1. 기존 state 복사
         new_state = dict(state)
 
-        # 2. input_key에서 최종 결과 추출
-        final_result = state.get(self.input_key, "")
+        # 2. BaseNode의 공통 메서드로 inputs 처리
+        input_vars = self._resolve_inputs(self.inputs, state)
 
         # 3. wrap_template이 있으면 포맷팅 적용
         if self.wrap_template:
             try:
-                # template의 {변수명} 부분을 state의 값으로 치환
-                formatted_output = self.wrap_template.format(**state)
-                # input_key의 값도 별도로 치환
-                formatted_output = formatted_output.replace(
-                    f"{{{self.input_key}}}", str(final_result)
+                formatted_output = self.wrap_template.format(**input_vars)
+                logger.debug(
+                    f"OutputNode({self.output}): "
+                    f"Formatted output with template"
                 )
-            except KeyError:
-                # template에 없는 변수가 있으면 기본값으로 처리
-                formatted_output = self.wrap_template.replace(
-                    f"{{{self.input_key}}}", str(final_result)
+            except KeyError as e:
+                # template에 없는 변수가 있으면 에러 메시지 포함
+                logger.error(
+                    f"OutputNode({self.output}): "
+                    f"Template formatting error: {e}. "
+                    f"Template: {self.wrap_template}, "
+                    f"Available vars: {list(input_vars.keys())}"
+                )
+                formatted_output = (
+                    f"Template formatting error: {str(e)}\n\n"
+                    f"Template: {self.wrap_template}\n"
+                    f"Available variables: {list(input_vars.keys())}"
                 )
         else:
-            # wrap_template이 없으면 그대로 사용
-            formatted_output = final_result
+            # wrap_template이 없으면 첫 번째 input 값만 사용
+            if input_vars:
+                # 첫 번째 input을 출력으로 사용
+                first_key = next(iter(input_vars))
+                formatted_output = str(input_vars[first_key])
+                logger.debug(
+                    f"OutputNode({self.output}): "
+                    f"No template, using first input '{first_key}'"
+                )
+            else:
+                formatted_output = ""
+                logger.warning(
+                    f"OutputNode({self.output}): "
+                    f"No template and no inputs provided"
+                )
 
-        # 4. output_key에 최종 출력 저장
-        new_state[self.output_key] = formatted_output
+        # 4. output에 최종 출력 저장
+        new_state[self.output] = formatted_output
+
+        logger.info(
+            f"OutputNode({self.output}): "
+            f"Generated output ({len(formatted_output)} chars)"
+        )
 
         return new_state
 

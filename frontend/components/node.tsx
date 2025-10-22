@@ -1,29 +1,81 @@
 "use client"
 
 import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
-import { useCallback } from "react";
+import { useState } from "react";
 
-function autoExtractVariables(template: string, currentVars: Record<string, string>) {
+// template에서 {변수} 추출하여 inputs 구조로 변환
+function autoExtractInputs(
+  systemPrompt: string = "",
+  userPrompt: string = "",
+  assistantPrompt: string = "",
+  currentInputs: Record<string, { type: string; value: string }> = {}
+) {
   const regex = /\{([^}]+)\}/g;
-  const matches = template.matchAll(regex);
-  const newVars: Record<string, string> = {};
+  const allText = `${systemPrompt} ${userPrompt} ${assistantPrompt}`;
+  const matches = allText.matchAll(regex);
+  
+  // 기존 inputs를 먼저 복사 (수동으로 추가한 변수 유지)
+  const newInputs: Record<string, { type: string; value: string }> = { ...currentInputs };
 
+  // 프롬프트에서 찾은 변수들을 추가 (이미 있으면 유지)
   for (const m of matches) {
     const key = m[1].trim();
-    newVars[key] = currentVars[key] ?? "";
+    if (!newInputs[key]) {
+      // 새로운 변수만 추가
+      newInputs[key] = { type: "reference", value: "" };
+    }
   }
 
-  return newVars;
+  return newInputs;
 }
 
 export default function BaseNode({ id, data }: NodeProps) {
-  const { setNodes } = useReactFlow();
+  const { setNodes, setEdges, getNodes } = useReactFlow();
+  
+  // 확장/축소 상태 관리
+  const [systemExpanded, setSystemExpanded] = useState(true);
+  const [userExpanded, setUserExpanded] = useState(true);
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
+  
+  // 임시 ID 상태 (편집 중인 ID)
+  const [tempId, setTempId] = useState(data?.tempId || id);
 
   // 공통 데이터 업데이트
   const updateNodeData = (patch: Record<string, any>) => {
     setNodes((nds) =>
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n))
     );
+  };
+
+  // 노드 ID 업데이트 (blur 시에만 실제 ID 변경)
+  const commitNodeId = () => {
+    const newId = tempId.trim();
+    if (newId && newId !== id) {
+      // 중복 확인
+      const nodes = getNodes();
+      const isDuplicate = nodes.some(n => n.id === newId && n.id !== id);
+      
+      if (isDuplicate) {
+        alert(`ID "${newId}"는 이미 사용 중입니다.`);
+        setTempId(id); // 원래 ID로 되돌림
+        return;
+      }
+      
+      setNodes((nds) =>
+        nds.map((n) => (n.id === id ? { ...n, id: newId, data: { ...n.data, tempId: newId } } : n))
+      );
+      // 연결된 엣지들도 업데이트
+      setEdges((eds) =>
+        eds.map((e) => ({
+          ...e,
+          source: e.source === id ? newId : e.source,
+          target: e.target === id ? newId : e.target,
+        }))
+      );
+    } else if (!newId) {
+      // 빈 값이면 원래 ID로 되돌림
+      setTempId(id);
+    }
   };
 
   // 노드 삭제
@@ -37,14 +89,14 @@ export default function BaseNode({ id, data }: NodeProps) {
   const getNodeStyle = () => {
     switch (data?.nodeType) {
       case "InputNode":
-        return "p-3 rounded-lg shadow-md bg-blue-50 border border-blue-200 min-w-[240px]";
+        return "p-3 rounded-lg shadow-md bg-blue-50 border border-blue-200 w-[380px]";
       case "OutputNode":
-        return "p-3 rounded-lg shadow-md bg-green-50 border border-green-200 min-w-[240px]";
+        return "p-3 rounded-lg shadow-md bg-green-50 border border-green-200 w-[380px]";
       case "RetrievalNode":
-        return "p-3 rounded-lg shadow-md bg-purple-50 border border-purple-200 min-w-[240px]";
+        return "p-3 rounded-lg shadow-md bg-purple-50 border border-purple-200 w-[380px]";
       case "PromptNode":
       default:
-        return "p-3 rounded-lg shadow-md bg-white border border-gray-200 min-w-[240px]";
+        return "p-3 rounded-lg shadow-md bg-white border border-gray-200 w-[480px]";
     }
   };
 
@@ -75,7 +127,12 @@ export default function BaseNode({ id, data }: NodeProps) {
                 <div>
                   <div className="font-bold mb-1">📥 Input Node</div>
                   <div>외부 입력을 그래프 state로 변환합니다.</div>
-                  <div className="mt-1 text-gray-300">• output_key: 결과를 저장할 키</div>
+                  <div className="mt-1 text-gray-300">
+                    <div>• output: user_input (고정값)</div>
+                    <div className="text-gray-400 text-[10px] mt-1">
+                      사용자 입력이 항상 'user_input' 키로 저장됩니다
+                    </div>
+                  </div>
                 </div>
               )}
               {data?.nodeType === "PromptNode" && (
@@ -83,10 +140,11 @@ export default function BaseNode({ id, data }: NodeProps) {
                   <div className="font-bold mb-1">💬 Prompt Node</div>
                   <div>LLM에 프롬프트를 전송하여 답변을 생성합니다.</div>
                   <div className="mt-1 text-gray-300">
-                    <div>• template: LLM에 보낼 프롬프트 템플릿</div>
-                    <div>• variables: 템플릿에서 사용할 변수들</div>
-                    <div>• input_key: 입력 데이터의 키</div>
-                    <div>• output_key: 결과를 저장할 키</div>
+                    <div>• system_prompt: 시스템 역할 정의</div>
+                    <div>• user_prompt: 사용자 요청 프롬프트</div>
+                    <div>• assistant_prompt: Few-shot 예시 (선택)</div>
+                    <div>• inputs: 프롬프트에 사용할 변수들</div>
+                    <div>• output: 생성된 답변을 저장할 키</div>
                   </div>
                 </div>
               )}
@@ -96,9 +154,9 @@ export default function BaseNode({ id, data }: NodeProps) {
                   <div>벡터 데이터베이스에서 관련 문서를 검색합니다.</div>
                   <div className="mt-1 text-gray-300">
                     <div>• top_k: 검색할 상위 문서 개수</div>
-                    <div>• collection: 검색할 컬렉션 이름</div>
-                    <div>• input_key: 검색 쿼리의 키</div>
-                    <div>• output_key: 검색 결과를 저장할 키</div>
+                    <div>• collection: 검색할 컬렉션 (추후 구현)</div>
+                    <div>• inputs: 검색에 사용할 변수 (query 등)</div>
+                    <div>• output: 검색 결과를 저장할 키</div>
                   </div>
                 </div>
               )}
@@ -108,8 +166,11 @@ export default function BaseNode({ id, data }: NodeProps) {
                   <div>최종 결과를 포맷팅하여 출력합니다.</div>
                   <div className="mt-1 text-gray-300">
                     <div>• wrap_template: 출력 포맷 템플릿</div>
-                    <div>• input_key: 포맷팅할 데이터의 키</div>
-                    <div>• output_key: 최종 결과를 저장할 키</div>
+                    <div>• inputs: 템플릿에 사용할 변수들</div>
+                    <div>• output: agent_output (고정값)</div>
+                    <div className="text-gray-400 text-[10px] mt-1">
+                      최종 결과가 항상 'agent_output' 키로 저장됩니다
+                    </div>
                   </div>
                 </div>
               )}
@@ -128,83 +189,274 @@ export default function BaseNode({ id, data }: NodeProps) {
         </div>
       </div>
 
-      {/* 타입 선택 */}
-      <div className="mb-2">
-        <label className="text-xs font-bold mr-2">Type:</label>
-        <select
-          value={data?.nodeType || "PromptNode"}
-          onChange={(e) => updateNodeData({ nodeType: e.target.value })}
-          className="text-xs border rounded px-1"
-        >
-          <option value="InputNode">Input Node</option>
-          <option value="PromptNode">Prompt Node</option>
-          <option value="RetrievalNode">Retrieval Node</option>
-          <option value="OutputNode">Output Node</option>
-          {/* RAGNode, AlertNode 등 추가 가능 */}
-        </select>
-      </div>
-
-      {/* input_key / output_key - InputNode는 input_key가 필요 없음 */}
-      {data?.nodeType !== "InputNode" && (
-        <div className="flex space-x-1 mb-2">
-          <label className="text-xs font-bold mr-2">
-            {data?.nodeType === "RetrievalNode" ? "query:" : "input_key:"}
-          </label>
-          <input
-            value={data?.input_key || ""}
-            onChange={(e) => updateNodeData({ input_key: e.target.value })}
-            placeholder="input_key"
-            className="flex-1 border rounded px-1 text-xs"
-          />
-        </div>
-      )}
-      <div className="flex space-x-1 mb-2">
-        <label className="text-xs font-bold mr-2">output_key:</label>
+      {/* 노드 ID 편집 */}
+      <div className="mb-2 flex items-center">
+        <label className="text-xs font-bold mr-2">ID:</label>
         <input
-          value={data?.output_key || ""}
-          onChange={(e) => updateNodeData({ output_key: e.target.value })}
-          placeholder="output_key"
-          className="flex-1 border rounded px-1 text-xs"
+          value={tempId}
+          onChange={(e) => setTempId(e.target.value)}
+          onBlur={commitNodeId}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur(); // Enter 시 blur 트리거
+            }
+          }}
+          placeholder="node-id"
+          className="flex-1 border rounded px-1 text-xs w-full"
         />
       </div>
+
+      {/* input_key / output_key - 새로운 방식을 사용하는 노드들은 제외 */}
+      {data?.nodeType !== "InputNode" && 
+       data?.nodeType !== "PromptNode" && 
+       data?.nodeType !== "RetrievalNode" &&
+       data?.nodeType !== "OutputNode" && (
+        <>
+          <div className="flex space-x-1 mb-2">
+            <label className="text-xs font-bold mr-2">input_key:</label>
+            <input
+              value={data?.input_key || ""}
+              onChange={(e) => updateNodeData({ input_key: e.target.value })}
+              placeholder="input_key"
+              className="flex-1 border rounded px-1 text-xs"
+            />
+          </div>
+          <div className="flex space-x-1 mb-2">
+            <label className="text-xs font-bold mr-2">output_key:</label>
+            <input
+              value={data?.output_key || ""}
+              onChange={(e) => updateNodeData({ output_key: e.target.value })}
+              placeholder="output_key"
+              className="flex-1 border rounded px-1 text-xs"
+            />
+          </div>
+        </>
+      )}
 
       {/* PromptNode UI */}
       {data?.nodeType === "PromptNode" && (
         <>
-          <label className="text-xs font-bold mr-2">template:</label>
-          <textarea
-            value={data?.template || ""}
-            onChange={(e) =>
-              updateNodeData({
-                template: e.target.value,
-                variables: autoExtractVariables(e.target.value, data.variables || {}),
-              })
-            }
-            placeholder="Enter prompt with {variables}"
-            className="w-full border rounded p-1 text-xs mb-2"
-            rows={3}
-          />
+          {/* System Prompt */}
+          <div className="mb-2">
+            <button
+              onClick={() => setSystemExpanded(!systemExpanded)}
+              className="flex items-center justify-between w-full text-xs font-bold mb-1 hover:text-blue-600"
+            >
+              <span>System Prompt:</span>
+              <span>{systemExpanded ? "▼" : "▶"}</span>
+            </button>
+            {systemExpanded && (
+              <textarea
+                value={data?.system_prompt || ""}
+                onChange={(e) =>
+                  updateNodeData({
+                    system_prompt: e.target.value,
+                    inputs: autoExtractInputs(
+                      e.target.value,
+                      data?.user_prompt || "",
+                      data?.assistant_prompt || "",
+                      data?.inputs || {}
+                    ),
+                  })
+                }
+                placeholder="You are a helpful assistant..."
+                className="w-full border rounded p-1 text-xs"
+                rows={2}
+              />
+            )}
+          </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold mr-2">variables:</label>
-            {data?.variables &&
-              Object.entries(data.variables).map(([key, val]) => (
-                <div key={key} className="flex items-center space-x-1">
-                  <span className="text-[10px] font-mono bg-gray-100 px-1 rounded">
-                    {key}
-                  </span>
-                  <input
-                    value={val as string}
-                    onChange={(e) =>
-                      updateNodeData({
-                        variables: { ...data.variables, [key]: e.target.value },
-                      })
-                    }
-                    className="flex-1 border rounded px-1 text-xs"
-                    placeholder="value"
-                  />
-                </div>
-              ))}
+          {/* User Prompt */}
+          <div className="mb-2">
+            <button
+              onClick={() => setUserExpanded(!userExpanded)}
+              className="flex items-center justify-between w-full text-xs font-bold mb-1 hover:text-blue-600"
+            >
+              <span>User Prompt:</span>
+              <span>{userExpanded ? "▼" : "▶"}</span>
+            </button>
+            {userExpanded && (
+              <textarea
+                value={data?.user_prompt || ""}
+                onChange={(e) =>
+                  updateNodeData({
+                    user_prompt: e.target.value,
+                    inputs: autoExtractInputs(
+                      data?.system_prompt || "",
+                      e.target.value,
+                      data?.assistant_prompt || "",
+                      data?.inputs || {}
+                    ),
+                  })
+                }
+                placeholder="Answer the question: {user_question}"
+                className="w-full border rounded p-1 text-xs"
+                rows={3}
+              />
+            )}
+          </div>
+
+          {/* Assistant Prompt (선택적) */}
+          <div className="mb-2">
+            <button
+              onClick={() => setAssistantExpanded(!assistantExpanded)}
+              className="flex items-center justify-between w-full text-xs font-bold mb-1 hover:text-blue-600"
+            >
+              <span>Assistant Prompt (선택):</span>
+              <span>{assistantExpanded ? "▼" : "▶"}</span>
+            </button>
+            {assistantExpanded && (
+              <textarea
+                value={data?.assistant_prompt || ""}
+                onChange={(e) =>
+                  updateNodeData({
+                    assistant_prompt: e.target.value,
+                    inputs: autoExtractInputs(
+                      data?.system_prompt || "",
+                      data?.user_prompt || "",
+                      e.target.value,
+                      data?.inputs || {}
+                    ),
+                  })
+                }
+                placeholder="Few-shot example..."
+                className="w-full border rounded p-1 text-xs"
+                rows={2}
+              />
+            )}
+          </div>
+
+          {/* Inputs / Output 레이아웃 */}
+          <div className="mt-3 pt-3 border-t space-y-2">
+            {/* Inputs */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold">Inputs:</label>
+                <button
+                  onClick={() => {
+                    const newKey = `var_${Object.keys(data?.inputs || {}).length + 1}`;
+                    const newInputs = { 
+                      ...(data?.inputs || {}), 
+                      [newKey]: { type: "reference", value: "" } 
+                    };
+                    updateNodeData({ inputs: newInputs });
+                  }}
+                  className="text-[10px] px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded"
+                  title="입력 추가"
+                >
+                  + 추가
+                </button>
+              </div>
+              <div className="space-y-1">
+                {data?.inputs &&
+                  Object.entries(data.inputs).map(([key, config]: [string, any], index: number) => {
+                    // 사용 가능한 output 목록 가져오기
+                    const availableOutputs = getNodes()
+                      .filter((n) => n.id !== id) // 자기 자신 제외
+                      .map((n) => ({
+                        id: n.id,
+                        output: n.data?.output || n.data?.output_key || "output",
+                      }));
+
+                    return (
+                      <div key={index} className="flex items-center gap-1">
+                        {/* 변수명 */}
+                        <input
+                          value={key}
+                          onChange={(e) => {
+                            const newInputs = { ...data.inputs };
+                            const value = newInputs[key];
+                            delete newInputs[key];
+                            newInputs[e.target.value] = value;
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-20 border rounded px-1 text-[10px] font-mono bg-gray-50"
+                          placeholder="변수명"
+                        />
+                        
+                        {/* 타입 전환 버튼 */}
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            const newType = config.type === "fixed" ? "reference" : "fixed";
+                            newInputs[key] = { ...config, type: newType, value: "" };
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 border rounded text-[9px] font-bold bg-white hover:bg-gray-100"
+                          title={config.type === "fixed" ? "고정값 → 참조" : "참조 → 고정값"}
+                        >
+                          {config.type === "fixed" ? "T" : "→"}
+                        </button>
+
+                        {/* 값 입력 */}
+                        {config.type === "fixed" ? (
+                          <input
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            placeholder="고정값"
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          />
+                        ) : (
+                          <select
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          >
+                            <option value="">선택하세요</option>
+                            {availableOutputs.map((opt) => (
+                              <option key={opt.id} value={opt.output}>
+                                {opt.id}.{opt.output}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* 삭제 버튼 */}
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            delete newInputs[key];
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center text-xs"
+                          title="삭제"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                {(!data?.inputs || Object.keys(data.inputs).length === 0) && (
+                  <div className="text-[10px] text-gray-400 italic">
+                    프롬프트에 {"{변수}"} 추가하거나 + 추가 버튼 클릭
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Output */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold w-16">Output:</label>
+              <input
+                value={data?.output || data?.output_key || ""}
+                onChange={(e) =>
+                  updateNodeData({
+                    output: e.target.value,
+                    output_key: e.target.value,
+                  })
+                }
+                placeholder="answer"
+                className="flex-1 border rounded px-1 text-xs"
+              />
+            </div>
           </div>
         </>
       )}
@@ -212,7 +464,17 @@ export default function BaseNode({ id, data }: NodeProps) {
       {/* InputNode UI */}
       {data?.nodeType === "InputNode" && (
         <>
-          <div className="p-2 bg-blue-50 rounded text-xs text-blue-700">
+          <div className="mb-2">
+            <label className="text-xs font-bold mr-2">Output:</label>
+            <input
+              value="user_input"
+              readOnly
+              className="w-full border rounded p-1 text-xs bg-gray-100 cursor-not-allowed"
+              title="InputNode의 출력은 항상 'user_input'으로 고정됩니다"
+            />
+            <div className="mt-1 text-[10px] text-gray-500 italic">
+              * 사용자 입력이 이 키로 저장됩니다 (수정 불가)
+            </div>
           </div>
         </>
       )}
@@ -220,16 +482,155 @@ export default function BaseNode({ id, data }: NodeProps) {
       {/* OutputNode UI */}
       {data?.nodeType === "OutputNode" && (
         <>
-          <div className="space-y-2">
+          {/* wrap_template */}
+          <div className="mb-2">
+            <label className="text-xs font-bold mr-2">wrap_template:</label>
+            <textarea
+              value={data?.wrap_template || ""}
+              onChange={(e) =>
+                updateNodeData({
+                  wrap_template: e.target.value,
+                  inputs: autoExtractInputs(
+                    "",
+                    e.target.value,
+                    "",
+                    data?.inputs || {}
+                  ),
+                })
+              }
+              placeholder="🤖 AI 답변:\n\n{answer}\n\n---\n질문: {user_input}"
+              className="w-full border rounded p-1 text-xs"
+              rows={4}
+            />
+          </div>
+
+          {/* Inputs / Output 레이아웃 */}
+          <div className="mt-3 pt-3 border-t space-y-2">
+            {/* Inputs */}
             <div>
-              <label className="text-xs font-bold mr-2">wrap_template:</label>
-              <textarea
-                value={data?.wrap_template || ""}
-                onChange={(e) => updateNodeData({ wrap_template: e.target.value })}
-                placeholder="AI의 답변입니다:\n{answer}"
-                className="w-full border rounded p-1 text-xs"
-                rows={3}
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold">Inputs:</label>
+                <button
+                  onClick={() => {
+                    const newKey = `var_${Object.keys(data?.inputs || {}).length + 1}`;
+                    const newInputs = { 
+                      ...(data?.inputs || {}), 
+                      [newKey]: { type: "reference", value: "" } 
+                    };
+                    updateNodeData({ inputs: newInputs });
+                  }}
+                  className="text-[10px] px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded"
+                  title="입력 추가"
+                >
+                  + 추가
+                </button>
+              </div>
+              <div className="space-y-1">
+                {data?.inputs &&
+                  Object.entries(data.inputs).map(([key, config]: [string, any], index: number) => {
+                    const availableOutputs = getNodes()
+                      .filter((n) => n.id !== id)
+                      .map((n) => ({
+                        id: n.id,
+                        output: n.data?.output || n.data?.output_key || "output",
+                      }));
+
+                    return (
+                      <div key={index} className="flex items-center gap-1">
+                        {/* 변수명 */}
+                        <input
+                          value={key}
+                          onChange={(e) => {
+                            const newInputs = { ...data.inputs };
+                            const value = newInputs[key];
+                            delete newInputs[key];
+                            newInputs[e.target.value] = value;
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-20 border rounded px-1 text-[10px] font-mono bg-gray-50"
+                          placeholder="변수명"
+                        />
+                        
+                        {/* 타입 전환 버튼 */}
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            const newType = config.type === "fixed" ? "reference" : "fixed";
+                            newInputs[key] = { ...config, type: newType, value: "" };
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 border rounded text-[9px] font-bold bg-white hover:bg-gray-100"
+                          title={config.type === "fixed" ? "고정값 → 참조" : "참조 → 고정값"}
+                        >
+                          {config.type === "fixed" ? "T" : "→"}
+                        </button>
+
+                        {/* 값 입력 */}
+                        {config.type === "fixed" ? (
+                          <input
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            placeholder="고정값"
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          />
+                        ) : (
+                          <select
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          >
+                            <option value="">선택하세요</option>
+                            {availableOutputs.map((opt) => (
+                              <option key={opt.id} value={opt.output}>
+                                {opt.id}.{opt.output}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* 삭제 버튼 */}
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            delete newInputs[key];
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center text-xs"
+                          title="삭제"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                {(!data?.inputs || Object.keys(data.inputs).length === 0) && (
+                  <div className="text-[10px] text-gray-400 italic">
+                    wrap_template에 {"{변수}"} 추가하거나 + 추가 버튼 클릭
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Output (고정값) */}
+            <div>
+              <label className="text-xs font-bold mr-2">Output:</label>
+              <input
+                value="agent_output"
+                readOnly
+                className="w-full border rounded p-1 text-xs bg-gray-100 cursor-not-allowed"
+                title="OutputNode의 출력은 항상 'agent_output'으로 고정됩니다"
               />
+              <div className="mt-1 text-[10px] text-gray-500 italic">
+                * 최종 결과가 이 키로 저장됩니다 (수정 불가)
+              </div>
             </div>
           </div>
         </>
@@ -238,25 +639,157 @@ export default function BaseNode({ id, data }: NodeProps) {
       {/* RetrievalNode UI */}
       {data?.nodeType === "RetrievalNode" && (
         <>
-          <div className="space-y-2">
+          {/* top_k */}
+          <div className="mb-2">
+            <label className="text-xs font-bold mr-2">top_k:</label>
+            <input
+              value={data?.top_k || 4}
+              onChange={(e) => updateNodeData({ top_k: parseInt(e.target.value) || 4 })}
+              placeholder="4"
+              type="number"
+              className="w-full border rounded p-1 text-xs"
+            />
+          </div>
+          
+          {/* collection */}
+          <div className="mb-2">
+            <label className="text-xs font-bold mr-2">collection:</label>
+            <input
+              value={data?.collection || ""}
+              onChange={(e) => updateNodeData({ collection: e.target.value })}
+              placeholder="컬렉션 이름 (추후 구현)"
+              className="w-full border rounded p-1 text-xs"
+            />
+          </div>
+
+          {/* Inputs / Output 레이아웃 */}
+          <div className="mt-3 pt-3 border-t space-y-2">
+            {/* Inputs */}
             <div>
-              <label className="text-xs font-bold mr-2">top_k:</label>
-              <input
-                value={data?.top_k || ""}
-                onChange={(e) => updateNodeData({ top_k: e.target.value })}
-                placeholder="상위 결과 개수"
-                type="number"
-                className="w-full border rounded p-1 text-xs"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold">Inputs:</label>
+                <button
+                  onClick={() => {
+                    const newKey = `var_${Object.keys(data?.inputs || {}).length + 1}`;
+                    const newInputs = { 
+                      ...(data?.inputs || {}), 
+                      [newKey]: { type: "reference", value: "" } 
+                    };
+                    updateNodeData({ inputs: newInputs });
+                  }}
+                  className="text-[10px] px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded"
+                  title="입력 추가"
+                >
+                  + 추가
+                </button>
+              </div>
+              <div className="space-y-1">
+                {data?.inputs &&
+                  Object.entries(data.inputs).map(([key, config]: [string, any], index: number) => {
+                    const availableOutputs = getNodes()
+                      .filter((n) => n.id !== id)
+                      .map((n) => ({
+                        id: n.id,
+                        output: n.data?.output || n.data?.output_key || "output",
+                      }));
+
+                    return (
+                      <div key={index} className="flex items-center gap-1">
+                        {/* 변수명 */}
+                        <input
+                          value={key}
+                          onChange={(e) => {
+                            const newInputs = { ...data.inputs };
+                            const value = newInputs[key];
+                            delete newInputs[key];
+                            newInputs[e.target.value] = value;
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-20 border rounded px-1 text-[10px] font-mono bg-gray-50"
+                          placeholder="변수명"
+                        />
+                        
+                        {/* 타입 전환 버튼 */}
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            const newType = config.type === "fixed" ? "reference" : "fixed";
+                            newInputs[key] = { ...config, type: newType, value: "" };
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 border rounded text-[9px] font-bold bg-white hover:bg-gray-100"
+                          title={config.type === "fixed" ? "고정값 → 참조" : "참조 → 고정값"}
+                        >
+                          {config.type === "fixed" ? "T" : "→"}
+                        </button>
+
+                        {/* 값 입력 */}
+                        {config.type === "fixed" ? (
+                          <input
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            placeholder="고정값"
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          />
+                        ) : (
+                          <select
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          >
+                            <option value="">선택하세요</option>
+                            {availableOutputs.map((opt) => (
+                              <option key={opt.id} value={opt.output}>
+                                {opt.id}.{opt.output}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* 삭제 버튼 */}
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            delete newInputs[key];
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center text-xs"
+                          title="삭제"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                {(!data?.inputs || Object.keys(data.inputs).length === 0) && (
+                  <div className="text-[10px] text-gray-400 italic">
+                    + 추가 버튼으로 입력 변수 추가
+                  </div>
+                )}
+              </div>
             </div>
-            
-            <div>
-              <label className="text-xs font-bold mr-2">collection:</label>
+
+            {/* Output */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold w-16">Output:</label>
               <input
-                value={data?.collection || ""}
-                onChange={(e) => updateNodeData({ collection: e.target.value })}
-                placeholder="컬렉션 이름(추가 예정)"
-                className="w-full border rounded p-1 text-xs"
+                value={data?.output || data?.output_key || ""}
+                onChange={(e) =>
+                  updateNodeData({
+                    output: e.target.value,
+                    output_key: e.target.value,
+                  })
+                }
+                placeholder="context"
+                className="flex-1 border rounded px-1 text-xs"
               />
             </div>
           </div>

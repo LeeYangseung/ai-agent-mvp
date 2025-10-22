@@ -1,7 +1,10 @@
 from typing import Dict, Any, Optional
 from langchain_openai import ChatOpenAI
 from .base import BaseNode
-from langchain.prompts import ChatPromptTemplate
+from langchain.schema.messages import SystemMessage, HumanMessage, AIMessage
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PromptNode(BaseNode):
@@ -9,40 +12,108 @@ class PromptNode(BaseNode):
 
     def __init__(
         self,
-        input_key: str,
-        output_key: str,
-        template: str = "",
-        variables: Dict[str, Any] = None,
+        output: str,
+        system_prompt: str = "",
+        user_prompt: str = "",
+        assistant_prompt: str = "",
+        inputs: Dict[str, Dict[str, str]] = None,
         llm: Optional[ChatOpenAI] = None,
+        **kwargs,
     ):
-        super().__init__(input_key, output_key, template, variables, llm)
+        """
+        Args:
+            output: 출력을 저장할 키
+            system_prompt: 시스템 프롬프트
+            user_prompt: 사용자 프롬프트
+            assistant_prompt: 어시스턴트 프롬프트
+                            (선택적, few-shot learning용)
+            inputs: 입력 변수들
+                   예: {"user_input":
+                        {"type": "reference", "value": "user_input"},
+                        "language":
+                        {"type": "fixed", "value": "한국어"}}
+            llm: LLM 인스턴스
+        """
+        super().__init__(output=output, llm=llm, **kwargs)
+        self.system_prompt = system_prompt
+        self.user_prompt = user_prompt
+        self.assistant_prompt = assistant_prompt
+        self.inputs = inputs or {}
 
     def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
         if self.llm is None:
             raise ValueError("LLM instance is required but not provided.")
 
-        # 1. input_key를 기준으로 state에서 꺼냄
-        input_val = state.get(self.input_key, "")
+        # 1. BaseNode의 공통 메서드로 inputs 처리
+        input_vars = self._resolve_inputs(self.inputs, state)
 
-        # 2. state의 모든 값을 기본값으로 설정
-        input_vars = dict(state)
+        # 2. 메시지 구성
+        messages = []
 
-        # 3. variables에서 설정된 값들로 덮어쓰기 (빈 문자열이 아닌 경우만)
-        if self.variables:
-            for key, value in self.variables.items():
-                if value:  # 빈 문자열이나 None이 아닌 경우만
-                    input_vars[key] = value
+        if self.system_prompt:
+            try:
+                formatted_system = self.system_prompt.format(**input_vars)
+                messages.append(SystemMessage(content=formatted_system))
+            except KeyError as e:
+                logger.error(
+                    f"PromptNode({self.output}): "
+                    f"system_prompt formatting error: {e}"
+                )
+                raise ValueError(
+                    f"Missing variable {e} in system_prompt. "
+                    f"Available: {list(input_vars.keys())}"
+                )
 
-        # 4. input_key의 값은 항상 최신 state 값으로 설정
-        if self.input_key:
-            input_vars[self.input_key] = input_val
+        if self.user_prompt:
+            try:
+                formatted_user = self.user_prompt.format(**input_vars)
+                messages.append(HumanMessage(content=formatted_user))
+            except KeyError as e:
+                logger.error(
+                    f"PromptNode({self.output}): "
+                    f"user_prompt formatting error: {e}"
+                )
+                raise ValueError(
+                    f"Missing variable {e} in user_prompt. "
+                    f"Available: {list(input_vars.keys())}"
+                )
 
-        # 5. 프롬프트 생성 및 실행
-        prompt = ChatPromptTemplate.from_template(self.template)
-        chain = prompt | self.llm
-        result = chain.invoke(input_vars)
+        if self.assistant_prompt:
+            try:
+                formatted_assistant = self.assistant_prompt.format(
+                    **input_vars
+                )
+                messages.append(AIMessage(content=formatted_assistant))
+                # Few-shot 예시 후 실제 사용자 질문 추가
+                # (대화 흐름: System → User → Assistant(예시) → User(실제))
+                if self.user_prompt:
+                    messages.append(HumanMessage(content=formatted_user))
+            except KeyError as e:
+                logger.error(
+                    f"PromptNode({self.output}): "
+                    f"assistant_prompt formatting error: {e}"
+                )
+                raise ValueError(
+                    f"Missing variable {e} in assistant_prompt. "
+                    f"Available: {list(input_vars.keys())}"
+                )
 
-        # 6. output_key에 저장
+        if not messages:
+            raise ValueError(
+                "PromptNode requires at least one prompt "
+                "(system_prompt, user_prompt, or assistant_prompt)"
+            )
+
+        # 3. LLM 호출
+        try:
+            result = self.llm.invoke(messages)
+        except Exception as e:
+            logger.error(
+                f"PromptNode({self.output}): LLM invocation failed: {e}"
+            )
+            raise
+
+        # 4. output에 저장
         new_state = dict(state)
-        new_state[self.output_key] = result.content
+        new_state[self.output] = result.content
         return new_state
