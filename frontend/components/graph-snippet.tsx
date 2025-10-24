@@ -6,8 +6,7 @@ export type GraphSnippet = {
       id: string;
       type: string;
       params: any;
-      input_key: string;
-      output_key: string;
+      output: string;
     }>;
     edges: Array<{
       source: string;
@@ -27,8 +26,7 @@ export const graphSnippets: GraphSnippet[] = [
           id: "input-1",
           type: "InputNode",
           params: {},
-          input_key: "",
-          output_key: "user_input"
+          output: "user_input"
         },
         {
           id: "prompt-1",
@@ -41,8 +39,7 @@ export const graphSnippets: GraphSnippet[] = [
               user_input: { type: "reference", value: "user_input" }
             }
           },
-          input_key: "",
-          output_key: "search_query"
+          output: "search_query"
         },
         {
           id: "retrieval-1",
@@ -54,8 +51,7 @@ export const graphSnippets: GraphSnippet[] = [
               query: { type: "reference", value: "search_query" }
             }
           },
-          input_key: "",
-          output_key: "context"
+          output: "context"
         },
         {
           id: "prompt-2",
@@ -69,8 +65,7 @@ export const graphSnippets: GraphSnippet[] = [
               context: { type: "reference", value: "context" }
             }
           },
-          input_key: "",
-          output_key: "answer"
+          output: "answer"
         },
         {
           id: "output-1",
@@ -81,8 +76,7 @@ export const graphSnippets: GraphSnippet[] = [
               answer: { type: "reference", value: "answer" }
             }
           },
-          input_key: "",
-          output_key: "agent_output"
+          output: "agent_output"
         }
       ],
       edges: [
@@ -102,8 +96,7 @@ export const graphSnippets: GraphSnippet[] = [
           id: "node-1",
           type: "InputNode",
           params: {},
-          input_key: "",
-          output_key: "user_input"
+          output: "user_input"
         },
         {
           id: "node-2",
@@ -128,8 +121,7 @@ export const graphSnippets: GraphSnippet[] = [
             ],
             default_target: "node-5"
           },
-          input_key: "user_input",
-          output_key: "condition_result"
+          output: "condition_result"
         },
         {
           id: "node-3",
@@ -140,8 +132,7 @@ export const graphSnippets: GraphSnippet[] = [
               answer: { type: "reference", value: "user_input" }
             }
           },
-          input_key: "",
-          output_key: "agent_output"
+          output: "agent_output"
         },
         {
           id: "node-4",
@@ -152,8 +143,7 @@ export const graphSnippets: GraphSnippet[] = [
               answer: { type: "reference", value: "user_input" }
             }
           },
-          input_key: "",
-          output_key: "agent_output"
+          output: "agent_output"
         },
         {
           id: "node-5",
@@ -164,8 +154,7 @@ export const graphSnippets: GraphSnippet[] = [
               answer: { type: "reference", value: "user_input" }
             }
           },
-          input_key: "",
-          output_key: "agent_output"
+          output: "agent_output"
         }
       ],
       edges: [

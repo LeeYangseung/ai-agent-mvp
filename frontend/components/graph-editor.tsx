@@ -203,15 +203,30 @@ export function GraphEditor() {
             );
           }
         } else {
-          // 일반 노드의 output_key를 타겟 노드의 input_key로 설정
-          if (sourceNode.data.output_key && sourceNode.data.output_key.trim() !== "") {
-            setNodes((nds) =>
-              nds.map((n) => 
-                n.id === params.target 
-                  ? { ...n, data: { ...n.data, input_key: sourceNode.data.output_key } }
-                  : n
-              )
-            );
+          // 일반 노드의 output을 타겟 노드의 inputs에 자동 설정
+          if (sourceNode.data.output && sourceNode.data.output.trim() !== "") {
+            // 타겟 노드가 RetrievalNode이고 query 입력이 비어있으면 자동 설정
+            if (targetNode.data.nodeType === "RetrievalNode") {
+              const currentInputs = targetNode.data.inputs || {};
+              if (!currentInputs.query || currentInputs.query.value === "") {
+                setNodes((nds) =>
+                  nds.map((n) => 
+                    n.id === params.target 
+                      ? { 
+                          ...n, 
+                          data: { 
+                            ...n.data, 
+                            inputs: {
+                              ...currentInputs,
+                              query: { type: "reference", value: sourceNode.data.output }
+                            }
+                          } 
+                        }
+                      : n
+                  )
+                );
+              }
+            }
           }
         }
       }
@@ -277,8 +292,7 @@ export function GraphEditor() {
       position: { x: 100 + nodes.length * 350, y: 200 },
       data: {
         nodeType: "InputNode",
-        input_key: "", // InputNode는 input_key가 필요 없음
-        output_key: "user_input", // 기본값으로 user_input 설정
+        output: "user_input",
       },
     };
     setNodes((nds) => [...nds, newNode]);
@@ -343,8 +357,6 @@ export function GraphEditor() {
       },
       data: {
         nodeType: nodeData.type,
-        input_key: nodeData.input_key,
-        output_key: nodeData.output_key,
         // 노드 타입에 따른 데이터 설정
         ...(nodeData.type === "InputNode" ? {
           output: "user_input",
@@ -357,17 +369,17 @@ export function GraphEditor() {
           user_prompt: nodeData.params.user_prompt || "",
           assistant_prompt: nodeData.params.assistant_prompt || "",
           inputs: nodeData.params.inputs || {},
-          output: nodeData.output_key || "answer",
+          output: nodeData.output || "answer",
         } : nodeData.type === "RetrievalNode" ? {
           top_k: nodeData.params.top_k || 4,
           collection: nodeData.params.collection || "",
           inputs: nodeData.params.inputs || {},
-          output: nodeData.output_key || "context",
+          output: nodeData.output || "context",
         } : nodeData.type === "ConditionNode" ? {
           inputs: nodeData.params.inputs || {},
           conditions: nodeData.params.conditions || [],
           default_target: nodeData.params.default_target || "",
-          output: nodeData.output_key || "condition_result",
+          output: nodeData.output || "condition_result",
         } : {})
       }
     }));
@@ -428,16 +440,9 @@ export function GraphEditor() {
       if (inputNode) {
         // InputNode가 있으면 "input" 키에 사용자 입력을 저장
         inputState.input = userInput;
-      } else if (nodes.length > 0) {
-        // InputNode가 없으면 첫 번째 노드의 input_key에 사용자 입력을 매핑
-        const firstNode = nodes[0];
-        const inputKey = firstNode.data.input_key;
-        if (inputKey && inputKey.trim() !== "") {
-          inputState[inputKey] = userInput;
-        } else {
-          // input_key가 없는 경우 기본값으로 question 사용
-          inputState.question = userInput;
-        }
+      } else {
+        // InputNode가 없으면 기본 키에 사용자 입력을 저장
+        inputState.user_input = userInput;
       }
       
       const graph = {
@@ -445,20 +450,20 @@ export function GraphEditor() {
           const baseNode = {
             id: n.id,
             type: n.data.nodeType || "PromptNode",
-            input_key: n.data.input_key || "",
-            output_key: n.data.output_key || "",
+            output: n.data.output || "output",
           };
 
           // 노드 타입에 따른 params 설정
           if (n.data.nodeType === "InputNode") {
             return {
               ...baseNode,
+              output: "user_input",
               params: {},
             };
           } else if (n.data.nodeType === "OutputNode") {
             return {
               ...baseNode,
-              output_key: "agent_output",
+              output: "agent_output",
               params: {
                 wrap_template: n.data.wrap_template || "",
                 inputs: n.data.inputs || {},
@@ -467,7 +472,7 @@ export function GraphEditor() {
           } else if (n.data.nodeType === "PromptNode") {
             return {
               ...baseNode,
-              output_key: n.data.output || n.data.output_key || "",
+              output: n.data.output || "output",
               params: {
                 system_prompt: n.data.system_prompt || "",
                 user_prompt: n.data.user_prompt || "",
@@ -478,7 +483,7 @@ export function GraphEditor() {
           } else if (n.data.nodeType === "RetrievalNode") {
             return {
               ...baseNode,
-              output_key: n.data.output || n.data.output_key || "",
+              output: n.data.output || "output",
               params: {
                 top_k: n.data.top_k || 4,
                 collection: n.data.collection || "",
@@ -488,7 +493,7 @@ export function GraphEditor() {
           } else if (n.data.nodeType === "ConditionNode") {
             return {
               ...baseNode,
-              output_key: n.data.output || n.data.output_key || "",
+              output: n.data.output || "condition_result",
               params: {
                 inputs: n.data.inputs || {},
                 conditions: n.data.conditions || [],

@@ -51,7 +51,7 @@ class BaseNode(Runnable):
                 # state에서 참조
                 # "node-id.output" 형식 지원 (현재는 flat state이므로 output만 사용)
                 if "." in var_value:
-                    # node_id.output_key 형식
+                    # node_id.output 형식
                     _, key = var_value.rsplit(".", 1)
                     actual_key = key
                 else:

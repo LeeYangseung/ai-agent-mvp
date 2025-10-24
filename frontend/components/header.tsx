@@ -2,27 +2,17 @@
 
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Bell, Volume2, Menu } from "lucide-react"
+import { Bell, Volume2 } from "lucide-react"
 
 interface HeaderProps {
-  sidebarOpen: boolean
-  setSidebarOpen: (open: boolean) => void
   currentPage: string
 }
 
-export function Header({ sidebarOpen, setSidebarOpen, currentPage }: HeaderProps) {
+export function Header({ currentPage }: HeaderProps) {
   return (
     <div className="bg-primary border-b border-primary/70 px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 text-white hover:bg-primary/80"
-          >
-            <Menu className="w-5 h-5" />
-          </Button>
           <h2 className="font-semibold text-white">
             {currentPage === "realtime" 
               ? "실시간 상담지원" 

@@ -1,29 +1,45 @@
 "use client"
 
-import { Bot, Database, GitBranch } from "lucide-react"
+import { Bot, Database, GitBranch, ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
   sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
   currentPage: string
   setCurrentPage: (page: string) => void
 }
 
-export function Sidebar({ sidebarOpen, currentPage, setCurrentPage }: SidebarProps) {
+export function Sidebar({ sidebarOpen, setSidebarOpen, currentPage, setCurrentPage }: SidebarProps) {
   return (
     <div
-      className={`${sidebarOpen ? "w-64" : "w-16"} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}
+      className={`${sidebarOpen ? "w-64" : "w-20"} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}
     >
       {/* Sidebar Header */}
       <div className="p-4">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 flex items-center justify-center">
-            <img src="/logo.png" alt="T Logo" className="w-8 h-8 object-contain" />
-          </div>
-          {sidebarOpen && (
-            <div>
-              <h1 className="font-semibold text-gray-800">AI Agent</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 flex items-center justify-center">
+              <img src="/logo.png" className="w-8 h-8 object-contain" />
             </div>
-          )}
+            {sidebarOpen && (
+              <div>
+                <h2 className="font-semibold text-black-800">Agent Flow</h2>
+              </div>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-1 text-gray-600 hover:bg-gray-100"
+          >
+            {sidebarOpen ? (
+              <ChevronLeft className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </Button>
         </div>
       </div>
 
@@ -38,8 +54,8 @@ export function Sidebar({ sidebarOpen, currentPage, setCurrentPage }: SidebarPro
                 : "text-gray-700 hover:bg-gray-50"
             }`}
           >
-            <GitBranch className="w-5 h-5 flex-shrink-0" />
-            {sidebarOpen && <span className="font-medium">AI Agent 그래프 에디터</span>}
+            <GitBranch className="w-6 h-6 flex-shrink-0" />
+            {sidebarOpen && <span className="font-medium">그래프 에디터</span>}
           </button>
 
           <button
@@ -50,7 +66,7 @@ export function Sidebar({ sidebarOpen, currentPage, setCurrentPage }: SidebarPro
                 : "text-gray-700 hover:bg-gray-50"
             }`}
           >
-            <Bot className="w-5 h-5 flex-shrink-0" />
+            <Bot className="w-6 h-6 flex-shrink-0" />
             {sidebarOpen && <span className="font-medium">AI Agent 관리</span>}
           </button>
 
@@ -62,7 +78,7 @@ export function Sidebar({ sidebarOpen, currentPage, setCurrentPage }: SidebarPro
                 : "text-gray-700 hover:bg-gray-50"
             }`}
           >
-            <Database className="w-5 h-5 flex-shrink-0" />
+            <Database className="w-6 h-6 flex-shrink-0" />
             {sidebarOpen && <span className="font-medium">지식 관리</span>}
           </button>
         </nav>

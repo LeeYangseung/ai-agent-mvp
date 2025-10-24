@@ -21,7 +21,7 @@ async def run_graph(graph_json: Dict[str, Any], llm):
           "id": "input-1",
           "type": "InputNode",
           "params": {},
-          "output_key": "user_input"  # 기본값: "user_input"
+          "output": "user_input"  # 기본값: "user_input"
         },
         {
           "id": "retrieval-1",
@@ -33,7 +33,7 @@ async def run_graph(graph_json: Dict[str, Any], llm):
               "query": {"type": "reference", "value": "user_input"}
             }
           },
-          "output_key": "context"
+          "output": "context"
         },
         {
           "id": "prompt-1",
@@ -47,7 +47,7 @@ async def run_graph(graph_json: Dict[str, Any], llm):
               "context": {"type": "reference", "value": "context"}
             }
           },
-          "output_key": "answer"
+          "output": "answer"
         },
         {
           "id": "output-1",
@@ -58,7 +58,7 @@ async def run_graph(graph_json: Dict[str, Any], llm):
               "answer": {"type": "reference", "value": "answer"}
             }
           },
-          "output_key": "agent_output"
+          "output": "agent_output"
         }
       ],
       "edges": [
@@ -72,13 +72,15 @@ async def run_graph(graph_json: Dict[str, Any], llm):
     }
 
     하위 호환성:
-    - 구버전 input_key/output_key 형식도 지원
+    - 구버전 input_key 형식도 지원
     - template → user_prompt 자동 변환
     - variables → inputs 자동 변환
     """
     nodes = graph_json.get("nodes", [])
     edges = graph_json.get("edges", [])
     input_state = graph_json.get("input_state", {})
+
+    # 스키마에서 이미 output 필드만 사용하도록 수정됨
 
     logger.info(f"Starting graph execution with {len(nodes)} nodes")
 
@@ -91,13 +93,13 @@ async def run_graph(graph_json: Dict[str, Any], llm):
         node_id = node["id"]
         node_type = node["type"]
         params = node.get("params", {})
-        output_key = node.get("output_key", "output")
+        output = node.get("output")
 
         logger.debug(f"Creating node: {node_id} (type: {node_type})")
 
         try:
             node_impl = _create_node(
-                node_type, node_id, params, output_key, node, llm
+                node_type, node_id, params, output, node, llm
             )
             workflow.add_node(node_id, node_impl)
             node_map[node_id] = node_impl
@@ -180,7 +182,7 @@ def _create_node(
     node_type: str,
     node_id: str,
     params: Dict[str, Any],
-    output_key: str,
+    output: str,
     node: Dict[str, Any],
     llm,
 ):
@@ -190,9 +192,8 @@ def _create_node(
     하위 호환성을 위한 변환 로직 포함
     """
     if node_type == "InputNode":
-        # output_key가 있으면 사용, 없으면 기본값 "user_input"
         return InputNode(
-            output=output_key if output_key != "output" else "user_input",
+            output=output,
             **params,
         )
 
@@ -200,17 +201,8 @@ def _create_node(
         wrap_template = params.get("wrap_template", "")
         inputs = params.get("inputs", {})
 
-        # 하위 호환성: 구버전 input_key 지원
-        input_key = node.get("input_key", "")
-        if input_key and not inputs:
-            logger.warning(
-                f"OutputNode({node_id}): Converting legacy input_key "
-                f"'{input_key}' to inputs format"
-            )
-            inputs = {input_key: {"type": "reference", "value": input_key}}
-
         return OutputNode(
-            output=output_key if output_key != "output" else "agent_output",
+            output=output,
             wrap_template=wrap_template,
             inputs=inputs,
         )
@@ -221,29 +213,8 @@ def _create_node(
         assistant_prompt = params.get("assistant_prompt", "")
         inputs = params.get("inputs", {})
 
-        # 하위 호환성: 구버전 template → user_prompt
-        if "template" in params and not user_prompt:
-            logger.warning(
-                f"PromptNode({node_id}): Converting legacy 'template' "
-                f"to 'user_prompt'"
-            )
-            user_prompt = params["template"]
-
-        # 하위 호환성: 구버전 variables → inputs
-        if "variables" in params and not inputs:
-            old_vars = params["variables"]
-            if isinstance(old_vars, dict):
-                logger.warning(
-                    f"PromptNode({node_id}): Converting legacy 'variables' "
-                    f"to 'inputs' format"
-                )
-                inputs = {
-                    key: {"type": "fixed", "value": val}
-                    for key, val in old_vars.items()
-                }
-
         return PromptNode(
-            output=output_key,
+            output=output,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             assistant_prompt=assistant_prompt,
@@ -256,17 +227,8 @@ def _create_node(
         collection = params.get("collection", "")
         inputs = params.get("inputs", {})
 
-        # 하위 호환성: 구버전 input_key 지원
-        input_key = node.get("input_key", "")
-        if input_key and not inputs:
-            logger.warning(
-                f"RetrievalNode({node_id}): Converting legacy input_key "
-                f"'{input_key}' to inputs format"
-            )
-            inputs = {"query": {"type": "reference", "value": input_key}}
-
         return RetrievalNode(
-            output=output_key,
+            output=output,
             top_k=top_k,
             collection=collection,
             inputs=inputs,
@@ -278,9 +240,7 @@ def _create_node(
         default_target = params.get("default_target", "")
 
         return ConditionNode(
-            output=(
-                output_key if output_key != "output" else "condition_result"
-            ),
+            output=output,
             inputs=inputs,
             conditions=conditions,
             default_target=default_target,

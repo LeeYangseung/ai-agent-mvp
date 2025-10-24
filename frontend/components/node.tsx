@@ -222,34 +222,6 @@ export default function BaseNode({ id, data }: NodeProps) {
         />
       </div>
 
-      {/* input_key / output_key - 새로운 방식을 사용하는 노드들은 제외 */}
-      {data?.nodeType !== "InputNode" && 
-       data?.nodeType !== "PromptNode" && 
-       data?.nodeType !== "RetrievalNode" &&
-       data?.nodeType !== "OutputNode" &&
-       data?.nodeType !== "ConditionNode" && (
-        <>
-        <div className="flex space-x-1 mb-2">
-            <label className="text-xs font-bold mr-2">input_key:</label>
-          <input
-            value={data?.input_key || ""}
-            onChange={(e) => updateNodeData({ input_key: e.target.value })}
-            placeholder="input_key"
-            className="flex-1 border rounded px-1 text-xs"
-          />
-        </div>
-      <div className="flex space-x-1 mb-2">
-        <label className="text-xs font-bold mr-2">output_key:</label>
-        <input
-          value={data?.output_key || ""}
-          onChange={(e) => updateNodeData({ output_key: e.target.value })}
-          placeholder="output_key"
-          className="flex-1 border rounded px-1 text-xs"
-        />
-      </div>
-        </>
-      )}
-
       {/* PromptNode UI */}
       {data?.nodeType === "PromptNode" && (
         <>
@@ -379,10 +351,10 @@ export default function BaseNode({ id, data }: NodeProps) {
                         if (n.data?.nodeType === "OutputNode") {
                           return { id: n.id, output: "agent_output" };
                         }
-                        // 기타 노드는 data.output 또는 data.output_key 사용
+                        // 기타 노드는 data.output 사용
                         return { 
                           id: n.id, 
-                          output: n.data?.output || n.data?.output_key || "output" 
+                          output: n.data?.output  || "output" 
                         };
                       });
 
@@ -474,11 +446,10 @@ export default function BaseNode({ id, data }: NodeProps) {
             <div className="flex items-center gap-2">
               <label className="text-xs font-bold w-16">Output:</label>
                   <input
-                value={data?.output || data?.output_key || ""}
+                value={data?.output || ""}
                     onChange={(e) =>
                       updateNodeData({
                     output: e.target.value,
-                    output_key: e.target.value,
                       })
                     }
                 placeholder="answer"
@@ -567,10 +538,10 @@ export default function BaseNode({ id, data }: NodeProps) {
                         if (n.data?.nodeType === "OutputNode") {
                           return { id: n.id, output: "agent_output" };
                         }
-                        // 기타 노드는 data.output 또는 data.output_key 사용
+                        // 기타 노드는 data.output 사용
                         return { 
                           id: n.id, 
-                          output: n.data?.output || n.data?.output_key || "output" 
+                          output: n.data?.output || "output" 
                         };
                       });
 
@@ -736,10 +707,10 @@ export default function BaseNode({ id, data }: NodeProps) {
                         if (n.data?.nodeType === "OutputNode") {
                           return { id: n.id, output: "agent_output" };
                         }
-                        // 기타 노드는 data.output 또는 data.output_key 사용
+                        // 기타 노드는 data.output 사용
                         return { 
                           id: n.id, 
-                          output: n.data?.output || n.data?.output_key || "output" 
+                          output: n.data?.output || "output" 
                         };
                       });
 
@@ -831,11 +802,10 @@ export default function BaseNode({ id, data }: NodeProps) {
             <div className="flex items-center gap-2">
               <label className="text-xs font-bold w-16">Output:</label>
               <input
-                value={data?.output || data?.output_key || ""}
+                value={data?.output || ""}
                 onChange={(e) =>
                   updateNodeData({
                     output: e.target.value,
-                    output_key: e.target.value,
                   })
                 }
                 placeholder="context"
@@ -1004,10 +974,10 @@ export default function BaseNode({ id, data }: NodeProps) {
                           if (n.data?.nodeType === "OutputNode") {
                             return { id: n.id, output: "agent_output" };
                           }
-                          // 기타 노드는 data.output 또는 data.output_key 사용
+                          // 기타 노드는 data.output 사용
                           return { 
                             id: n.id, 
-                            output: n.data?.output || n.data?.output_key || "output" 
+                            output: n.data?.output || "output" 
                           };
                         });
 

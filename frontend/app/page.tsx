@@ -11,7 +11,7 @@ export default function KBAgentAssistant() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <Sidebar sidebarOpen={sidebarOpen} currentPage={currentPage} setCurrentPage={setCurrentPage} />
+      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} currentPage={currentPage} setCurrentPage={setCurrentPage} />
 
       <div className="flex-1 flex flex-col">
         <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} currentPage={currentPage} />

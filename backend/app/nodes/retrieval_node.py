@@ -64,10 +64,18 @@ class RetrievalNode(BaseNode):
             )
 
         if not query:
+            # 디버깅을 위한 상세 정보
+            logger.error(f"RetrievalNode({self.output}): Query not found")
+            logger.error(f"  - inputs config: {self.inputs}")
+            logger.error(f"  - resolved input_vars: {input_vars}")
+            logger.error(f"  - state keys: {list(state.keys())}")
+
             raise ValueError(
                 f"RetrievalNode({self.output}): "
                 f"Query not found. "
-                f"Available inputs: {list(self.inputs.keys())}"
+                f"Available inputs: {list(self.inputs.keys())}, "
+                f"Resolved values: {input_vars}, "
+                f"State keys: {list(state.keys())}"
             )
 
         # 3. 벡터 검색 수행
