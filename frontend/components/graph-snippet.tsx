@@ -93,5 +93,88 @@ export const graphSnippets: GraphSnippet[] = [
       ],
       input_state: { input: "보험 해지 시 환급금은 얼마나 받을 수 있나요?" }
     }
+  },
+  {
+    name: "분기 테스트",
+    data: {
+      nodes: [
+        {
+          id: "node-1",
+          type: "InputNode",
+          params: {},
+          input_key: "",
+          output_key: "user_input"
+        },
+        {
+          id: "node-2",
+          type: "ConditionNode",
+          params: {
+            inputs: {
+              answer: { type: "reference", value: "user_input" }
+            },
+            conditions: [
+              {
+                variable: "answer",
+                operator: "==",
+                value: "일번",
+                target: "node-3"
+              },
+              {
+                variable: "answer",
+                operator: "==",
+                value: "이번",
+                target: "node-4"
+              }
+            ],
+            default_target: "node-5"
+          },
+          input_key: "user_input",
+          output_key: "condition_result"
+        },
+        {
+          id: "node-3",
+          type: "OutputNode",
+          params: {
+            wrap_template: "🤖 AI 답변:\n첫 번째 분기입니다:\n{answer}",
+            inputs: {
+              answer: { type: "reference", value: "user_input" }
+            }
+          },
+          input_key: "",
+          output_key: "agent_output"
+        },
+        {
+          id: "node-4",
+          type: "OutputNode",
+          params: {
+            wrap_template: "🤖 AI 답변:\n두 번째 분기입니다:\n{answer}",
+            inputs: {
+              answer: { type: "reference", value: "user_input" }
+            }
+          },
+          input_key: "",
+          output_key: "agent_output"
+        },
+        {
+          id: "node-5",
+          type: "OutputNode",
+          params: {
+            wrap_template: "🤖 AI 답변:\nElse 분기입니다:\n{answer}",
+            inputs: {
+              answer: { type: "reference", value: "user_input" }
+            }
+          },
+          input_key: "",
+          output_key: "agent_output"
+        }
+      ],
+      edges: [
+        { source: "node-1", target: "node-2" },
+        { source: "node-2", target: "node-3" },
+        { source: "node-2", target: "node-4" },
+        { source: "node-2", target: "node-5" }
+      ],
+      input_state: { input: "일번" }
+    }
   }
 ];

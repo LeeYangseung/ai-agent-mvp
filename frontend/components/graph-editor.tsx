@@ -94,12 +94,14 @@ function NodeSidebar({
   onAddRetrievalNode, 
   onAddInputNode,
   onAddOutputNode,
+  onAddConditionNode,
   onLoadSnippet 
 }: { 
   onAddNode: () => void;
   onAddRetrievalNode: () => void;
   onAddInputNode: () => void;
   onAddOutputNode: () => void;
+  onAddConditionNode: () => void;
   onLoadSnippet: (snippet: GraphSnippet) => void;
 }) {
   return (
@@ -122,6 +124,12 @@ function NodeSidebar({
         onClick={onAddRetrievalNode}
       >
         🔍 Add Retrieval Node
+      </Button>
+      <Button
+        className="w-full mb-2"
+        onClick={onAddConditionNode}
+      >
+        🔀 Add Condition Node
       </Button>
       <Button
         className="w-full mb-2"
@@ -162,15 +170,49 @@ export function GraphEditor() {
       const targetNode = nodes.find(n => n.id === params.target);
       
       if (sourceNode && targetNode) {
-        // 소스 노드의 output_key를 타겟 노드의 input_key로 설정
-        if (sourceNode.data.output_key && sourceNode.data.output_key.trim() !== "") {
-          setNodes((nds) =>
-            nds.map((n) => 
-              n.id === params.target 
-                ? { ...n, data: { ...n.data, input_key: sourceNode.data.output_key } }
-                : n
-            )
-          );
+        // ConditionNode의 특별한 Handle 처리
+        if (sourceNode.data.nodeType === "ConditionNode" && params.sourceHandle) {
+          const handleId = params.sourceHandle;
+          
+          if (handleId.startsWith("condition-")) {
+            // condition-0, condition-1 등 → 해당 조건의 target 설정
+            const conditionIndex = parseInt(handleId.replace("condition-", ""));
+            setNodes((nds) =>
+              nds.map((n) => {
+                if (n.id === params.source) {
+                  const newConditions = [...(n.data.conditions || [])];
+                  if (newConditions[conditionIndex]) {
+                    newConditions[conditionIndex] = {
+                      ...newConditions[conditionIndex],
+                      target: params.target
+                    };
+                  }
+                  return { ...n, data: { ...n.data, conditions: newConditions } };
+                }
+                return n;
+              })
+            );
+          } else if (handleId === "else") {
+            // ELSE handle → default_target 설정
+            setNodes((nds) =>
+              nds.map((n) => 
+                n.id === params.source 
+                  ? { ...n, data: { ...n.data, default_target: params.target } }
+                  : n
+              )
+            );
+          }
+        } else {
+          // 일반 노드의 output_key를 타겟 노드의 input_key로 설정
+          if (sourceNode.data.output_key && sourceNode.data.output_key.trim() !== "") {
+            setNodes((nds) =>
+              nds.map((n) => 
+                n.id === params.target 
+                  ? { ...n, data: { ...n.data, input_key: sourceNode.data.output_key } }
+                  : n
+              )
+            );
+          }
         }
       }
       
@@ -260,6 +302,31 @@ export function GraphEditor() {
     setNodes((nds) => [...nds, newNode]);
   };
 
+  const onAddConditionNode = () => {
+    const newNode: Node = {
+      id: `node-${nodes.length + 1}`,
+      type: "BaseNode",
+      position: { x: 100 + nodes.length * 350, y: 200 },
+      data: {
+        nodeType: "ConditionNode",
+        inputs: {
+          answer: { type: "reference", value: "" }
+        },
+        conditions: [
+          {
+            variable: "answer",
+            operator: "contains",
+            value: "긍정적",
+            target: ""
+          }
+        ],
+        default_target: "",
+        output: "condition_result",
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  };
+
   // 스니펫 로드 함수
   const onLoadSnippet = (snippet: GraphSnippet) => {
     // 기존 노드와 엣지 초기화
@@ -296,26 +363,52 @@ export function GraphEditor() {
           collection: nodeData.params.collection || "",
           inputs: nodeData.params.inputs || {},
           output: nodeData.output_key || "context",
+        } : nodeData.type === "ConditionNode" ? {
+          inputs: nodeData.params.inputs || {},
+          conditions: nodeData.params.conditions || [],
+          default_target: nodeData.params.default_target || "",
+          output: nodeData.output_key || "condition_result",
         } : {})
       }
     }));
 
     // 스니펫의 엣지들을 ReactFlow 엣지 형태로 변환 (화살표 포함)
-    const newEdges = snippet.data.edges.map((edge, index) => ({
-      id: `edge-${index}`,
-      source: edge.source,
-      target: edge.target,
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        width: 15,
-        height: 15,
-        color: '#6b7280',
-      },
-      style: {
-        strokeWidth: 2,
-        stroke: '#6b7280',
-      },
-    }));
+    const newEdges = snippet.data.edges.map((edge, index) => {
+      const sourceNode = snippet.data.nodes.find(n => n.id === edge.source);
+      let sourceHandle = undefined;
+      
+      // ConditionNode에서 나오는 엣지인 경우 올바른 sourceHandle 설정
+      if (sourceNode && sourceNode.type === "ConditionNode") {
+        const conditionNode = sourceNode;
+        const conditions = conditionNode.params?.conditions || [];
+        const defaultTarget = conditionNode.params?.default_target || "";
+        
+        // 조건별 target과 매칭되는 sourceHandle 찾기
+        const conditionIndex = conditions.findIndex((cond: any) => cond.target === edge.target);
+        if (conditionIndex !== -1) {
+          sourceHandle = `condition-${conditionIndex}`;
+        } else if (edge.target === defaultTarget) {
+          sourceHandle = "else";
+        }
+      }
+      
+      return {
+        id: `edge-${index}`,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: sourceHandle,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 15,
+          height: 15,
+          color: '#6b7280',
+        },
+        style: {
+          strokeWidth: 2,
+          stroke: '#6b7280',
+        },
+      };
+    });
 
     setNodes(newNodes);
     setEdges(newEdges);
@@ -392,6 +485,16 @@ export function GraphEditor() {
                 inputs: n.data.inputs || {},
               },
             };
+          } else if (n.data.nodeType === "ConditionNode") {
+            return {
+              ...baseNode,
+              output_key: n.data.output || n.data.output_key || "",
+              params: {
+                inputs: n.data.inputs || {},
+                conditions: n.data.conditions || [],
+                default_target: n.data.default_target || "",
+              },
+            };
           }
 
           return baseNode;
@@ -439,6 +542,7 @@ export function GraphEditor() {
         onAddRetrievalNode={onAddRetrievalNode} 
         onAddInputNode={onAddInputNode}
         onAddOutputNode={onAddOutputNode}
+        onAddConditionNode={onAddConditionNode}
         onLoadSnippet={onLoadSnippet}
       />
 

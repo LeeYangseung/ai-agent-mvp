@@ -13,7 +13,7 @@ function autoExtractInputs(
   const regex = /\{([^}]+)\}/g;
   const allText = `${systemPrompt} ${userPrompt} ${assistantPrompt}`;
   const matches = allText.matchAll(regex);
-  
+
   // 기존 inputs를 먼저 복사 (수동으로 추가한 변수 유지)
   const newInputs: Record<string, { type: string; value: string }> = { ...currentInputs };
 
@@ -94,6 +94,8 @@ export default function BaseNode({ id, data }: NodeProps) {
         return "p-3 rounded-lg shadow-md bg-green-50 border border-green-200 w-[380px]";
       case "RetrievalNode":
         return "p-3 rounded-lg shadow-md bg-purple-50 border border-purple-200 w-[380px]";
+      case "ConditionNode":
+        return "p-3 rounded-lg shadow-md bg-yellow-50 border border-yellow-200 w-[480px]";
       case "PromptNode":
       default:
         return "p-3 rounded-lg shadow-md bg-white border border-gray-200 w-[480px]";
@@ -110,6 +112,7 @@ export default function BaseNode({ id, data }: NodeProps) {
           {data?.nodeType === "PromptNode" && "💬 Prompt Node"}
           {data?.nodeType === "RetrievalNode" && "🔍 Retrieval Node"}
           {data?.nodeType === "OutputNode" && "📤 Output Node"}
+          {data?.nodeType === "ConditionNode" && "🔀 Condition Node"}
         </div>
         
         {/* 오른쪽 버튼들 */}
@@ -174,6 +177,19 @@ export default function BaseNode({ id, data }: NodeProps) {
                   </div>
                 </div>
               )}
+              {data?.nodeType === "ConditionNode" && (
+                <div>
+                  <div className="font-bold mb-1">🔀 Condition Node</div>
+                  <div>조건에 따라 다른 노드로 분기합니다.</div>
+                  <div className="mt-1 text-gray-300">
+                    <div>• inputs: 조건 평가에 사용할 변수들</div>
+                    <div>• conditions: IF/ELSE IF/ELSE 조건 목록</div>
+                    <div className="text-gray-400 text-[10px] mt-1">
+                      각 조건마다 연결선으로 다음 노드 지정
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           {/* 삭제 버튼 */}
@@ -210,26 +226,27 @@ export default function BaseNode({ id, data }: NodeProps) {
       {data?.nodeType !== "InputNode" && 
        data?.nodeType !== "PromptNode" && 
        data?.nodeType !== "RetrievalNode" &&
-       data?.nodeType !== "OutputNode" && (
+       data?.nodeType !== "OutputNode" &&
+       data?.nodeType !== "ConditionNode" && (
         <>
-          <div className="flex space-x-1 mb-2">
+        <div className="flex space-x-1 mb-2">
             <label className="text-xs font-bold mr-2">input_key:</label>
-            <input
-              value={data?.input_key || ""}
-              onChange={(e) => updateNodeData({ input_key: e.target.value })}
-              placeholder="input_key"
-              className="flex-1 border rounded px-1 text-xs"
-            />
-          </div>
-          <div className="flex space-x-1 mb-2">
-            <label className="text-xs font-bold mr-2">output_key:</label>
-            <input
-              value={data?.output_key || ""}
-              onChange={(e) => updateNodeData({ output_key: e.target.value })}
-              placeholder="output_key"
-              className="flex-1 border rounded px-1 text-xs"
-            />
-          </div>
+          <input
+            value={data?.input_key || ""}
+            onChange={(e) => updateNodeData({ input_key: e.target.value })}
+            placeholder="input_key"
+            className="flex-1 border rounded px-1 text-xs"
+          />
+        </div>
+      <div className="flex space-x-1 mb-2">
+        <label className="text-xs font-bold mr-2">output_key:</label>
+        <input
+          value={data?.output_key || ""}
+          onChange={(e) => updateNodeData({ output_key: e.target.value })}
+          placeholder="output_key"
+          className="flex-1 border rounded px-1 text-xs"
+        />
+      </div>
         </>
       )}
 
@@ -276,10 +293,10 @@ export default function BaseNode({ id, data }: NodeProps) {
               <span>{userExpanded ? "▼" : "▶"}</span>
             </button>
             {userExpanded && (
-              <textarea
+          <textarea
                 value={data?.user_prompt || ""}
-                onChange={(e) =>
-                  updateNodeData({
+            onChange={(e) =>
+              updateNodeData({
                     user_prompt: e.target.value,
                     inputs: autoExtractInputs(
                       data?.system_prompt || "",
@@ -291,8 +308,8 @@ export default function BaseNode({ id, data }: NodeProps) {
                 }
                 placeholder="Answer the question: {user_question}"
                 className="w-full border rounded p-1 text-xs"
-                rows={3}
-              />
+            rows={3}
+          />
             )}
           </div>
 
@@ -347,16 +364,27 @@ export default function BaseNode({ id, data }: NodeProps) {
                   + 추가
                 </button>
               </div>
-              <div className="space-y-1">
+          <div className="space-y-1">
                 {data?.inputs &&
                   Object.entries(data.inputs).map(([key, config]: [string, any], index: number) => {
                     // 사용 가능한 output 목록 가져오기
                     const availableOutputs = getNodes()
                       .filter((n) => n.id !== id) // 자기 자신 제외
-                      .map((n) => ({
-                        id: n.id,
-                        output: n.data?.output || n.data?.output_key || "output",
-                      }));
+                      .map((n) => {
+                        // InputNode는 user_input을 출력
+                        if (n.data?.nodeType === "InputNode") {
+                          return { id: n.id, output: "user_input" };
+                        }
+                        // OutputNode는 agent_output을 출력
+                        if (n.data?.nodeType === "OutputNode") {
+                          return { id: n.id, output: "agent_output" };
+                        }
+                        // 기타 노드는 data.output 또는 data.output_key 사용
+                        return { 
+                          id: n.id, 
+                          output: n.data?.output || n.data?.output_key || "output" 
+                        };
+                      });
 
                     return (
                       <div key={index} className="flex items-center gap-1">
@@ -445,18 +473,18 @@ export default function BaseNode({ id, data }: NodeProps) {
             {/* Output */}
             <div className="flex items-center gap-2">
               <label className="text-xs font-bold w-16">Output:</label>
-              <input
+                  <input
                 value={data?.output || data?.output_key || ""}
-                onChange={(e) =>
-                  updateNodeData({
+                    onChange={(e) =>
+                      updateNodeData({
                     output: e.target.value,
                     output_key: e.target.value,
-                  })
-                }
+                      })
+                    }
                 placeholder="answer"
-                className="flex-1 border rounded px-1 text-xs"
-              />
-            </div>
+                    className="flex-1 border rounded px-1 text-xs"
+                  />
+                </div>
           </div>
         </>
       )}
@@ -484,9 +512,9 @@ export default function BaseNode({ id, data }: NodeProps) {
         <>
           {/* wrap_template */}
           <div className="mb-2">
-            <label className="text-xs font-bold mr-2">wrap_template:</label>
-            <textarea
-              value={data?.wrap_template || ""}
+              <label className="text-xs font-bold mr-2">wrap_template:</label>
+              <textarea
+                value={data?.wrap_template || ""}
               onChange={(e) =>
                 updateNodeData({
                   wrap_template: e.target.value,
@@ -499,7 +527,7 @@ export default function BaseNode({ id, data }: NodeProps) {
                 })
               }
               placeholder="🤖 AI 답변:\n\n{answer}\n\n---\n질문: {user_input}"
-              className="w-full border rounded p-1 text-xs"
+                className="w-full border rounded p-1 text-xs"
               rows={4}
             />
           </div>
@@ -530,10 +558,21 @@ export default function BaseNode({ id, data }: NodeProps) {
                   Object.entries(data.inputs).map(([key, config]: [string, any], index: number) => {
                     const availableOutputs = getNodes()
                       .filter((n) => n.id !== id)
-                      .map((n) => ({
-                        id: n.id,
-                        output: n.data?.output || n.data?.output_key || "output",
-                      }));
+                      .map((n) => {
+                        // InputNode는 user_input을 출력
+                        if (n.data?.nodeType === "InputNode") {
+                          return { id: n.id, output: "user_input" };
+                        }
+                        // OutputNode는 agent_output을 출력
+                        if (n.data?.nodeType === "OutputNode") {
+                          return { id: n.id, output: "agent_output" };
+                        }
+                        // 기타 노드는 data.output 또는 data.output_key 사용
+                        return { 
+                          id: n.id, 
+                          output: n.data?.output || n.data?.output_key || "output" 
+                        };
+                      });
 
                     return (
                       <div key={index} className="flex items-center gap-1">
@@ -641,24 +680,24 @@ export default function BaseNode({ id, data }: NodeProps) {
         <>
           {/* top_k */}
           <div className="mb-2">
-            <label className="text-xs font-bold mr-2">top_k:</label>
-            <input
+              <label className="text-xs font-bold mr-2">top_k:</label>
+              <input
               value={data?.top_k || 4}
               onChange={(e) => updateNodeData({ top_k: parseInt(e.target.value) || 4 })}
               placeholder="4"
-              type="number"
-              className="w-full border rounded p-1 text-xs"
-            />
-          </div>
-          
+                type="number"
+                className="w-full border rounded p-1 text-xs"
+              />
+            </div>
+            
           {/* collection */}
           <div className="mb-2">
-            <label className="text-xs font-bold mr-2">collection:</label>
-            <input
-              value={data?.collection || ""}
-              onChange={(e) => updateNodeData({ collection: e.target.value })}
+              <label className="text-xs font-bold mr-2">collection:</label>
+              <input
+                value={data?.collection || ""}
+                onChange={(e) => updateNodeData({ collection: e.target.value })}
               placeholder="컬렉션 이름 (추후 구현)"
-              className="w-full border rounded p-1 text-xs"
+                className="w-full border rounded p-1 text-xs"
             />
           </div>
 
@@ -688,10 +727,21 @@ export default function BaseNode({ id, data }: NodeProps) {
                   Object.entries(data.inputs).map(([key, config]: [string, any], index: number) => {
                     const availableOutputs = getNodes()
                       .filter((n) => n.id !== id)
-                      .map((n) => ({
-                        id: n.id,
-                        output: n.data?.output || n.data?.output_key || "output",
-                      }));
+                      .map((n) => {
+                        // InputNode는 user_input을 출력
+                        if (n.data?.nodeType === "InputNode") {
+                          return { id: n.id, output: "user_input" };
+                        }
+                        // OutputNode는 agent_output을 출력
+                        if (n.data?.nodeType === "OutputNode") {
+                          return { id: n.id, output: "agent_output" };
+                        }
+                        // 기타 노드는 data.output 또는 data.output_key 사용
+                        return { 
+                          id: n.id, 
+                          output: n.data?.output || n.data?.output_key || "output" 
+                        };
+                      });
 
                     return (
                       <div key={index} className="flex items-center gap-1">
@@ -796,6 +846,255 @@ export default function BaseNode({ id, data }: NodeProps) {
         </>
       )}
 
+      {/* ConditionNode UI */}
+      {data?.nodeType === "ConditionNode" && (
+        <>
+            {/* Conditions 섹션 */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold">Conditions:</label>
+                <button
+                  onClick={() => {
+                    const newConditions = [...(data.conditions || [])];
+                    const availableInputs = Object.keys(data.inputs || {});
+                    newConditions.push({
+                      variable: availableInputs[0] || "",
+                      operator: "==",
+                      value: "",
+                      target: "",
+                    });
+                    updateNodeData({ conditions: newConditions });
+                  }}
+                  className="px-2 py-0.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded text-[10px]"
+                >
+                  + 조건 추가
+                </button>
+              </div>
+              <div className="space-y-2">
+                {data?.conditions &&
+                  data.conditions.map((cond: any, index: number) => {
+                    const inputVars = Object.keys(data.inputs || {});
+
+                    return (
+                      <div key={index} className="border border-yellow-300 rounded p-2 bg-yellow-50 relative">
+                        <div className="text-[10px] font-bold text-yellow-700 mb-1">
+                          {index === 0 ? "IF" : `ELSE IF ${index}`}
+                        </div>
+                        <div className="space-y-1">
+                          {/* Variable selector */}
+
+                          <div className="flex gap-1">
+                            <select
+                              value={cond.variable || ""}
+                              onChange={(e) => {
+                                const newConditions = [...(data.conditions || [])];
+                                newConditions[index] = { ...cond, variable: e.target.value };
+                                updateNodeData({ conditions: newConditions });
+                              }}
+                              className="w-full border rounded px-1 text-[10px]"
+                            >
+                              <option value="">변수 선택</option>
+                              {inputVars.map((v) => (
+                                <option key={v} value={v}>
+                                  {v}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => {
+                                const newConditions = [...(data.conditions || [])];
+                                newConditions.splice(index, 1);
+                                updateNodeData({ conditions: newConditions });
+                              }}
+                              className="w-5 h-5 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center text-xs"
+                              title="조건 삭제"
+                            >
+                              ×
+                            </button>
+                          </div>
+
+                          <div className="flex gap-1">
+                            {/* Operator selector */}
+                            <select
+                              value={cond.operator || "=="}
+                              onChange={(e) => {
+                                const newConditions = [...(data.conditions || [])];
+                                newConditions[index] = { ...cond, operator: e.target.value };
+                                updateNodeData({ conditions: newConditions });
+                              }}
+                              className="flex-1 border rounded px-1 text-[10px]"
+                            >
+                              <option value="==">==</option>
+                              <option value="!=">!=</option>
+                              <option value="<>">{"<>"}</option>
+                              <option value=">">{">"}</option>
+                              <option value=">=">{">="}</option>
+                              <option value="<">{"<"}</option>
+                              <option value="<=">{"<="}</option>
+                              <option value="contains">포함</option>
+                              <option value="not_contains">불포함</option>
+                              <option value="starts_with">시작</option>
+                              <option value="ends_with">종료</option>
+                            </select>
+
+                            {/* Comparison value */}
+                            <input
+                              value={cond.value || ""}
+                              onChange={(e) => {
+                                const newConditions = [...(data.conditions || [])];
+                                newConditions[index] = { ...cond, value: e.target.value };
+                                updateNodeData({ conditions: newConditions });
+                              }}
+                              placeholder="비교값"
+                              className="flex-1 border rounded px-1 text-[10px]"
+                            />
+                          </div>
+                        </div>
+                        
+                      </div>
+                    );
+                  })}
+                {(!data?.conditions || data.conditions.length === 0) && (
+                  <div className="text-[10px] text-gray-400 italic">
+                    + 조건 추가 버튼으로 IF/ELSE IF 조건 추가
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ELSE (default_target) 섹션 */}
+            <div className="mt-2">
+              <div className="border border-yellow-300 rounded p-2 bg-yellow-50 relative">
+                <div className="text-[10px] font-bold text-yellow-700 mb-1">ELSE</div>
+                <div className="text-[10px] text-gray-600">
+                  모든 조건이 거짓일 때 실행되는 기본 경로입니다.
+                  <br />
+                  연결선을 통해 다음 노드를 지정하세요.
+                </div>
+              </div>
+            </div>
+            {/* Inputs 섹션 */}
+            <div className="space-y-2 mt-2">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold">Inputs:</label>
+                  <button
+                    onClick={() => {
+                      const newInputs = { ...data.inputs };
+                      const newKey = `var_${Object.keys(newInputs).length + 1}`;
+                      newInputs[newKey] = { type: "reference", value: "" };
+                      updateNodeData({ inputs: newInputs });
+                    }}
+                    className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-[10px]"
+                  >
+                    + 추가
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {data?.inputs &&
+                    Object.entries(data.inputs).map(([key, config]: [string, any], index) => {
+                      const availableOutputs = getNodes()
+                        .filter((n) => n.id !== id)
+                        .map((n) => {
+                          // InputNode는 user_input을 출력
+                          if (n.data?.nodeType === "InputNode") {
+                            return { id: n.id, output: "user_input" };
+                          }
+                          // OutputNode는 agent_output을 출력
+                          if (n.data?.nodeType === "OutputNode") {
+                            return { id: n.id, output: "agent_output" };
+                          }
+                          // 기타 노드는 data.output 또는 data.output_key 사용
+                          return { 
+                            id: n.id, 
+                            output: n.data?.output || n.data?.output_key || "output" 
+                          };
+                        });
+
+                      return (
+                        <div key={index} className="flex items-center gap-1">
+                          <input
+                            value={key}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              const value = newInputs[key];
+                              delete newInputs[key];
+                              newInputs[e.target.value] = value;
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            className="w-20 border rounded px-1 text-[10px] font-mono bg-gray-50"
+                            placeholder="변수명"
+                          />
+                          
+                          <button
+                            onClick={() => {
+                              const newInputs = { ...data.inputs };
+                              const newType = config.type === "fixed" ? "reference" : "fixed";
+                              newInputs[key] = { ...config, type: newType, value: "" };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            className="w-5 h-5 border rounded text-[9px] font-bold bg-white hover:bg-gray-100"
+                            title={config.type === "fixed" ? "고정값 → 참조" : "참조 → 고정값"}
+                          >
+                            {config.type === "fixed" ? "T" : "→"}
+                          </button>
+
+                          {config.type === "fixed" ? (
+                            <input
+                              value={config.value || ""}
+                              onChange={(e) => {
+                                const newInputs = { ...data.inputs };
+                                newInputs[key] = { ...config, value: e.target.value };
+                                updateNodeData({ inputs: newInputs });
+                              }}
+                              placeholder="고정값"
+                              className="flex-1 border rounded px-1 text-[10px]"
+                            />
+                          ) : (
+                            <select
+                              value={config.value || ""}
+                              onChange={(e) => {
+                                const newInputs = { ...data.inputs };
+                                newInputs[key] = { ...config, value: e.target.value };
+                                updateNodeData({ inputs: newInputs });
+                              }}
+                              className="flex-1 border rounded px-1 text-[10px]"
+                            >
+                              <option value="">선택하세요</option>
+                              {availableOutputs.map((opt) => (
+                                <option key={opt.id} value={opt.output}>
+                                  {opt.id}.{opt.output}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              const newInputs = { ...data.inputs };
+                              delete newInputs[key];
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            className="w-5 h-5 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center text-xs"
+                            title="삭제"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      );
+                    })}
+                  {(!data?.inputs || Object.keys(data.inputs).length === 0) && (
+                    <div className="text-[10px] text-gray-400 italic">
+                      + 추가 버튼으로 입력 변수 추가
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+        </>
+      )}
+
+      {/* Input Handle (모든 노드 공통) */}
       <Handle 
         type="target" 
         position={Position.Left} 
@@ -810,6 +1109,58 @@ export default function BaseNode({ id, data }: NodeProps) {
         className="hover:scale-110 transition-transform duration-200"
         title="입력 연결점 (Input)"
       />
+
+      {/* Output Handles - ConditionNode는 조건별로 여러 개 */}
+      {data?.nodeType === "ConditionNode" ? (
+        <>
+          {/* 각 조건마다 별도의 source handle */}
+          {data?.conditions && data.conditions.map((cond: any, index: number) => {
+            // 각 조건 블록의 중간 지점에 위치하도록 계산
+            // 헤더(80px) + 조건들 위쪽 여백(8px) + 각 조건 블록 높이(85px) * index + 조건 블록 높이의 절반(42.5px)
+            const topPosition = 80 + 8 + (index * 85) + 42.5;
+            
+            return (
+              <Handle
+                key={`condition-${index}`}
+                type="source"
+                position={Position.Right}
+                id={`condition-${index}`}
+                style={{
+                  top: `${topPosition}px`,
+                  width: 12,
+                  height: 12,
+                  background: '#6b7280',
+                  border: '2px solid white',
+                  borderRadius: '50%',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}
+                className="hover:scale-110 transition-transform duration-200"
+                title={`${index === 0 ? 'IF' : `ELSE IF ${index}`} 경로`}
+              />
+            );
+          })}
+          
+          {/* ELSE handle */}
+          <Handle
+            key="else"
+            type="source"
+            position={Position.Right}
+            id="else"
+            style={{
+              top: 'calc(100% - 95px)', // ELSE 섹션의 중간 지점
+              width: 12,
+              height: 12,
+              background: '#6b7280',
+              border: '2px solid white',
+              borderRadius: '50%',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+            className="hover:scale-110 transition-transform duration-200"
+            title="ELSE 경로"
+          />
+        </>
+      ) : (
+        /* 일반 노드는 단일 source handle */
       <Handle 
         type="source" 
         position={Position.Right}
@@ -824,6 +1175,7 @@ export default function BaseNode({ id, data }: NodeProps) {
         className="hover:scale-110 transition-transform duration-200"
         title="출력 연결점 (Output)"
       />
+      )}
     </div>
   );
 }
