@@ -1,9 +1,10 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 from langgraph.graph import StateGraph, START, END
 from app.nodes.prompt_node import PromptNode
 from app.nodes.retrieval_node import RetrievalNode
 from app.nodes.input_node import InputNode
 from app.nodes.output_node import OutputNode
+from app.nodes.condition_node import ConditionNode
 import logging
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ async def run_graph(graph_json: Dict[str, Any], llm):
     node_map = {}
 
     # 1. 노드 생성
+    condition_nodes = []  # ConditionNode 목록 (나중에 조건부 엣지 추가)
     for node in nodes:
         node_id = node["id"]
         node_type = node["type"]
@@ -99,31 +101,74 @@ async def run_graph(graph_json: Dict[str, Any], llm):
             )
             workflow.add_node(node_id, node_impl)
             node_map[node_id] = node_impl
+
+            # ConditionNode는 따로 기록 (조건부 엣지 처리용)
+            if node_type == "ConditionNode":
+                condition_nodes.append((node_id, node_impl, params))
         except Exception as e:
             logger.error(f"Failed to create node {node_id}: {e}")
             raise
 
-    # 2. 엣지 연결
+    # 2. 일반 엣지 연결 (ConditionNode 제외)
     for edge in edges:
         source = edge["source"]
         target = edge["target"]
-        workflow.add_edge(source, target)
-        logger.debug(f"Added edge: {source} -> {target}")
 
-    # 3. 시작/끝 연결
+        # source가 ConditionNode가 아닌 경우만 일반 엣지로 연결
+        source_node = next((n for n in nodes if n["id"] == source), None)
+        if source_node and source_node.get("type") != "ConditionNode":
+            workflow.add_edge(source, target)
+            logger.debug(f"Added edge: {source} -> {target}")
+
+    # 3. ConditionNode의 조건부 엣지 추가
+    for node_id, node_impl, params in condition_nodes:
+        conditions = params.get("conditions", [])
+        default_target = params.get("default_target", "")
+
+        # 조건부 라우팅 함수 생성
+        def route_condition(state: Dict[str, Any]) -> str:
+            """조건에 따라 다음 노드 결정"""
+            return state.get("__next__", default_target)
+
+        # 가능한 모든 타겟 노드 목록 생성
+        possible_targets = [c.get("target") for c in conditions]
+        if default_target:
+            possible_targets.append(default_target)
+
+        # 중복 제거
+        possible_targets = list(set(filter(None, possible_targets)))
+
+        if possible_targets:
+            workflow.add_conditional_edges(
+                node_id,
+                route_condition,
+                {target: target for target in possible_targets},
+            )
+            logger.debug(
+                f"Added conditional edges from {node_id} "
+                f"to {possible_targets}"
+            )
+        else:
+            logger.warning(f"ConditionNode({node_id}) has no valid targets")
+
+    # 4. 시작/끝 연결
     if nodes:
         workflow.add_edge(START, nodes[0]["id"])
-        workflow.add_edge(nodes[-1]["id"], END)
-        logger.debug(
-            f"Graph flow: START -> {nodes[0]['id']} ... "
-            f"{nodes[-1]['id']} -> END"
-        )
 
-    # 4. 컴파일
+        # 마지막 노드는 OutputNode일 가능성이 높음
+        # 여러 경로가 있을 수 있으므로 모든 OutputNode에서 END로 연결
+        for node in nodes:
+            if node.get("type") == "OutputNode":
+                workflow.add_edge(node["id"], END)
+                logger.debug(f"Added edge: {node['id']} -> END")
+
+        logger.debug(f"Graph flow: START -> {nodes[0]['id']}")
+
+    # 5. 컴파일
     app = workflow.compile()
     logger.info("Graph compiled successfully")
 
-    # 5. 실행
+    # 6. 실행
     logger.info(f"Executing graph with input_state: {input_state}")
     final_state = await app.ainvoke(input_state)
     logger.info("Graph execution completed")
@@ -225,6 +270,20 @@ def _create_node(
             top_k=top_k,
             collection=collection,
             inputs=inputs,
+        )
+
+    elif node_type == "ConditionNode":
+        inputs = params.get("inputs", {})
+        conditions = params.get("conditions", [])
+        default_target = params.get("default_target", "")
+
+        return ConditionNode(
+            output=(
+                output_key if output_key != "output" else "condition_result"
+            ),
+            inputs=inputs,
+            conditions=conditions,
+            default_target=default_target,
         )
 
     else:
