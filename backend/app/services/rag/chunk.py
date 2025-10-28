@@ -99,7 +99,11 @@ async def get_chunk(
     청크 데이터를 가져오는 서비스 함수
     """
     try:
-        db_chunk = await chunk_crud.read_chunk(db, chunk_id=chunk_id)
+        db_chunk = await chunk_crud.read_chunk(
+            db=db,
+            chunk_id=chunk_id,
+            is_deleted=False,
+        )
         if db_chunk is None:
             raise NotFoundError()
 
@@ -149,6 +153,7 @@ async def update_chunk(
             db,
             chunk_id=chunk_id,
             update_lock=True,
+            is_deleted=False,
         )
         if db_chunk is None:
             raise NotFoundError()
@@ -181,13 +186,15 @@ async def delete_chunk(
             db,
             chunk_id=chunk_id,
             update_lock=True,
+            is_deleted=False,
         )
+        if db_chunk is None:
+            raise NotFoundError()
+
         db_chunk = await chunk_crud.delete_chunk(
             db_chunk=db_chunk,
             updated_by=chunk.updated_by,
         )
-        if not db_chunk:
-            raise NotFoundError()
         await db.commit()
         await db.refresh(db_chunk)
         return ChunkIdResponse(id=UUID(str(db_chunk.id)))
@@ -213,12 +220,12 @@ async def delete_chunk_hard(
             chunk_id=chunk_id,
             update_lock=True,
         )
+        if db_chunk is None:
+            raise NotFoundError()
         db_chunk = await chunk_crud.delete_chunk_hard(
             db_chunk=db_chunk,
             db=db,
         )
-        if not db_chunk:
-            raise NotFoundError()
         await db.commit()
         await db.refresh(db_chunk)
         return ChunkIdResponse(id=UUID(str(db_chunk.id)))

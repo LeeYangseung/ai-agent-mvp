@@ -25,7 +25,7 @@ from app.schemas.pagination import Pagination
 from app.utils.common import convert_sqlalchemy_to_pydantic
 from app.core.config import settings
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Optional, Tuple
 from pydantic import UUID4
 from uuid import UUID
 import shutil
@@ -80,7 +80,7 @@ async def get_documents(
     path: Optional[str] = None,
     status: Optional[DocumentStatus] = None,
     sort: Optional[str] = "created_at:desc",
-):
+) -> Tuple[Pagination, DocumentsResponse]:
     """
     문서 목록과 페이징 데이터를 조합하는 서비스 함수
     """
@@ -239,6 +239,7 @@ async def update_document(
             db,
             document_id=document_id,
             update_lock=True,
+            is_deleted=False,
         )
         if db_document is None:
             raise NotFoundError()
@@ -309,7 +310,10 @@ async def delete_document(
             db,
             document_id=document_id,
             update_lock=True,
+            is_deleted=False,
         )
+        if db_document is None:
+            raise NotFoundError()
         # Chunks 삭제
         existing_chunks = await chunk_crud.read_chunks(
             db,
@@ -325,8 +329,6 @@ async def delete_document(
             db_document=db_document,
             updated_by=document.updated_by,
         )
-        if not db_document:
-            raise NotFoundError()
         await db.commit()
         await db.refresh(db_document)
         return DocumentIdResponse(id=UUID(str(db_document.id)))
@@ -341,7 +343,6 @@ async def delete_document(
 async def delete_document_hard(
     db: AsyncSession,
     document_id: UUID4,
-    document: DocumentDeleteRequest,
 ) -> DocumentIdResponse:
     """
     문서 데이터를 삭제하는 서비스 함수
@@ -350,26 +351,26 @@ async def delete_document_hard(
         db_document = await document_crud.read_document(
             db,
             document_id=document_id,
+            update_lock=True,
         )
+        if db_document is None:
+            raise NotFoundError()
         # Chunks 삭제
-        if db_document.chunks:
-            existing_chunks = await chunk_crud.read_chunks(
-                db,
-                document_id=document_id,
-                limit=None,  # 모든 chunks 조회
-            )
-            if existing_chunks[1]:  # chunks가 있으면
-                for chunk in existing_chunks[1]:
-                    _ = await chunk_crud.delete_chunk_hard(
-                        db_chunk=chunk,
-                        db=db,
-                    )
+        existing_chunks = await chunk_crud.read_chunks(
+            db,
+            document_id=document_id,
+            limit=None,  # 모든 chunks 조회
+        )
+        if existing_chunks[1]:  # chunks가 있으면
+            for chunk in existing_chunks[1]:
+                _ = await chunk_crud.delete_chunk_hard(
+                    db_chunk=chunk,
+                    db=db,
+                )
         db_document = await document_crud.delete_document_hard(
             db_document=db_document,
             db=db,
         )
-        if not db_document:
-            raise NotFoundError()
         await db.commit()
         await db.refresh(db_document)
         return DocumentIdResponse(id=UUID(str(db_document.id)))

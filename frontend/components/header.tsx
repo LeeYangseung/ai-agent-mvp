@@ -21,7 +21,7 @@ export function Header({ currentPage }: HeaderProps) {
               : currentPage === "knowledge-management"
               ? "지식 관리"
               : currentPage === "graph-editor"
-              ? "AI Agent 그래프 에디터"
+              ? "그래프 에디터"
               : "상담 후처리 관리"}
           </h2>
         </div>

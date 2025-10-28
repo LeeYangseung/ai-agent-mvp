@@ -11,6 +11,10 @@ from alembic import context
 from app.database.models.base import Base
 from app.database.models.rag.document import Document
 from app.database.models.rag.chunk import Chunk
+from app.database.models.graph.graph import Graph
+from app.database.models.graph.node import Node
+from app.database.models.graph.edge import Edge
+from app.database.models.graph.graph_history import GraphHistory
 
 
 # this is the Alembic Config object, which provides

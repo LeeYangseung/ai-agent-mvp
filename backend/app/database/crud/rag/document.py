@@ -216,46 +216,6 @@ async def read_document(
         return db_document.unique().scalars().first()
 
 
-async def read_document_by_email(
-    db: AsyncSession,
-    email: str,
-    update_lock: Optional[bool] = False,
-    is_deleted: Optional[bool] = None,
-):
-    query = select(DocumentModel).where(
-        and_(
-            DocumentModel.email == email,
-            DocumentModel.is_deleted.is_(False),
-        )
-    )
-    if is_deleted:
-        query = query.where(DocumentModel.is_deleted.is_(is_deleted))
-    if update_lock:
-        query = query.with_for_update()
-    db_document = await db.execute(query)
-    return db_document.unique().scalars().first()
-
-
-async def read_document_by_document_number(
-    db: AsyncSession,
-    document_number: str,
-    update_lock: Optional[bool] = False,
-    is_deleted: Optional[bool] = None,
-):
-    query = select(DocumentModel).where(
-        and_(
-            DocumentModel.document_number == document_number,
-            DocumentModel.is_deleted.is_(False),
-        )
-    )
-    if is_deleted:
-        query = query.where(DocumentModel.is_deleted.is_(is_deleted))
-    if update_lock:
-        query = query.with_for_update()
-    db_document = await db.execute(query)
-    return db_document.unique().scalars().first()
-
-
 async def update_document(
     db_document: DocumentModel,
     document: DocumentUpdateRequest,

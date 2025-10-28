@@ -100,7 +100,7 @@ class RetrievalNode(BaseNode):
 
             # 5. 결과를 output에 저장
             new_state = dict(state)
-            new_state[self.output] = retrieved_content
+            new_state[self._get_state_key()] = retrieved_content
 
             logger.info(
                 f"RetrievalNode({self.output}): "

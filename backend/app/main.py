@@ -23,7 +23,7 @@ logger = setup_logger()
 async def lifespan(app: FastAPI):
     # 서버 시작 시 테이블 생성
     # 테이블 이미 존재하는 경우 아무 작업도 수행하지 않음
-    await create_tables()
+    # await create_tables()
     yield
     # await drop_tables()
     # 서버 종료 시 실행할 작업 (필요 시 추가 가능)

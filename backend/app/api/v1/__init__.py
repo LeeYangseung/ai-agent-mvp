@@ -2,6 +2,9 @@ from fastapi.routing import APIRouter
 from app.api.v1.graph.graph import router as graph_router
 from app.api.v1.rag.chunk import router as chunk_router
 from app.api.v1.rag.document import router as document_router
+from app.api.v1.graph.graph_history import router as graph_history_router
+from app.api.v1.graph.node import router as node_router
+from app.api.v1.graph.edge import router as edge_router
 
 """
 이곳에서 v1 버전 API의 라우터를 통합합니다.
@@ -11,7 +14,12 @@ root_router = APIRouter()
 
 # v1 router setup
 router = APIRouter(prefix="/v1")
-router.include_router(graph_router, prefix="/graph", tags=["그래프"])
+router.include_router(graph_router, prefix="/graphs", tags=["그래프"])
+router.include_router(
+    graph_history_router, prefix="/graph-histories", tags=["그래프 히스토리"]
+)
+router.include_router(node_router, prefix="/nodes", tags=["노드"])
+router.include_router(edge_router, prefix="/edges", tags=["엣지"])
 router.include_router(chunk_router, prefix="/chunks", tags=["청크"])
 router.include_router(document_router, prefix="/documents", tags=["문서"])
 

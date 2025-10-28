@@ -115,5 +115,5 @@ class PromptNode(BaseNode):
 
         # 4. output에 저장
         new_state = dict(state)
-        new_state[self.output] = result.content
+        new_state[self._get_state_key()] = result.content
         return new_state

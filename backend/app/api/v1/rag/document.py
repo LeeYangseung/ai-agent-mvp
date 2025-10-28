@@ -266,7 +266,6 @@ async def delete_document_hard(
     request: Request,
     response: Response,
     document_id: UUID4 = Path(..., description="문서 ID"),
-    document: DocumentDeleteRequest = Body(..., description="문서 삭제 요청"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -276,7 +275,6 @@ async def delete_document_hard(
         response_data = await document_service.delete_document_hard(
             db=db,
             document_id=document_id,
-            document=document,
         )
         return ResponseModel(
             status=http_status.HTTP_200_OK,

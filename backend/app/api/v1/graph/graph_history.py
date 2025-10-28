@@ -2,26 +2,25 @@ from fastapi import (
     APIRouter,
     Depends,
     Request,
-    status as http_status,
     Response,
-    Query,
     Path,
     Body,
+    status as http_status,
+    Query,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from pydantic import UUID4
+
 from app.core.deps import get_db
 from app.core.exception import InternalServerError, CustomException
 from app.schemas.base import ResponseModel
-from app.schemas.rag.chunk import (
-    ChunkCreateRequest,
-    ChunkUpdateRequest,
-    ChunkDeleteRequest,
-    ChunkIdResponse,
-    ChunkIdsResponse,
+from app.schemas.graph.graph_history import (
+    GraphHistoryCreateRequest,
+    GraphHistoryUpdateRequest,
+    GraphHistoryDeleteRequest,
 )
-from app.services.rag import chunk as chunk_service
+from app.services.graph import graph_history as graph_history_service
 from app.core.logging import get_logger
 
 logger = get_logger("app")
@@ -29,54 +28,37 @@ logger = get_logger("app")
 router = APIRouter()
 
 
-# 청크 목록 조회
+# 그래프 히스토리 목록 조회
 @router.get("", response_model=ResponseModel)
-async def get_chunk_list(
+async def get_graph_history_list(
     request: Request,
     response: Response,
     page: int = Query(0, ge=0, description="페이지 번호"),
     size: int = Query(10, ge=1, le=100, description="페이지 크기"),
-    chunk_id: Optional[UUID4] = Query(None, description="청크 ID(Filter)"),
-    document_id: Optional[UUID4] = Query(None, description="문서 ID(Filter)"),
-    chunk_index: Optional[int] = Query(
-        None, description="청크 인덱스(Filter)"
+    graph_history_id: Optional[UUID4] = Query(
+        None, description="그래프 히스토리 ID(Filter)"
     ),
-    content: Optional[str] = Query(None, description="청크 내용(Search)"),
-    embedding_id: Optional[str] = Query(
-        None, description="VectorDB key(Filter)"
-    ),
-    chunk_size: Optional[int] = Query(None, description="청크 크기(Filter)"),
-    overlap_size: Optional[int] = Query(
-        None, description="청크 중복 크기(Filter)"
-    ),
-    method: Optional[str] = Query(None, description="청크 방법(Filter)"),
-    sort: Optional[str] = Query(
-        "created_at:desc",
-        description="정렬 조건 (예: created_at:asc,chunk_index:desc)",
-    ),
+    graph_id: Optional[UUID4] = Query(None, description="그래프 ID(Filter)"),
+    status: Optional[str] = Query(None, description="상태(Filter)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    청크 목록 조회 API
+    그래프 히스토리 목록 조회 API
     """
     try:
-        pagination, response_data = await chunk_service.get_chunks(
-            db=db,
-            page=page,
-            size=size,
-            chunk_id=chunk_id,
-            document_id=document_id,
-            chunk_index=chunk_index,
-            content=content,
-            embedding_id=embedding_id,
-            chunk_size=chunk_size,
-            overlap_size=overlap_size,
-            method=method,
-            sort=sort,
+        pagination, response_data = (
+            await graph_history_service.get_graph_histories(
+                db=db,
+                page=page,
+                size=size,
+                graph_history_id=graph_history_id,
+                graph_id=graph_id,
+                status=status,
+            )
         )
         return ResponseModel(
             status=http_status.HTTP_200_OK,
-            message="청크 목록 조회에 성공했습니다.",
+            message="그래프 히스토리 목록 조회에 성공했습니다.",
             pagination=pagination,
             data=response_data,
         )
@@ -86,30 +68,30 @@ async def get_chunk_list(
     except Exception as e:
         logger.exception(f"{str(e)}")
         raise InternalServerError(
-            message="청크 목록 조회에 실패했습니다.",
+            message="그래프 히스토리 목록 조회에 실패했습니다.",
             data=str(e),
         )
 
 
-# 청크 상세 조회
-@router.get("/{chunk_id}", response_model=ResponseModel)
-async def get_chunk(
+# 그래프 히스토리 상세 조회
+@router.get("/{graph_history_id}", response_model=ResponseModel)
+async def get_graph_history(
     request: Request,
     response: Response,
-    chunk_id: UUID4 = Path(..., description="청크 ID"),
+    graph_history_id: UUID4 = Path(..., description="그래프 히스토리 ID"),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    청크 상세 조회 API
+    그래프 히스토리 상세 조회 API
     """
     try:
-        response_data = await chunk_service.get_chunk(
+        response_data = await graph_history_service.get_graph_history(
             db=db,
-            chunk_id=chunk_id,
+            graph_history_id=graph_history_id,
         )
         return ResponseModel(
             status=http_status.HTTP_200_OK,
-            message="청크 상세 조회에 성공했습니다.",
+            message="그래프 히스토리 상세 조회에 성공했습니다.",
             data=response_data,
         )
     except CustomException as ce:
@@ -117,34 +99,34 @@ async def get_chunk(
         raise
     except Exception as e:
         raise InternalServerError(
-            message="청크 조회에 실패했습니다.",
+            message="그래프 히스토리 조회에 실패했습니다.",
             data=str(e),
         )
 
 
-# 청크 생성
+# 그래프 히스토리 생성
 @router.post(
     "",
     response_model=ResponseModel,
     status_code=http_status.HTTP_201_CREATED,
 )
-async def create_chunk(
+async def create_graph_history(
     request: Request,
     response: Response,
-    chunk: ChunkCreateRequest,
+    graph_history: GraphHistoryCreateRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    청크 생성 API
+    그래프 히스토리 생성 API
     """
     try:
-        response_data = await chunk_service.create_chunk(
+        response_data = await graph_history_service.create_graph_history(
             db=db,
-            chunk=chunk,
+            graph_history=graph_history,
         )
         return ResponseModel(
             status=http_status.HTTP_201_CREATED,
-            message="청크 생성에 성공했습니다.",
+            message="그래프 히스토리 생성에 성공했습니다.",
             data=response_data,
         )
     except CustomException as ce:
@@ -153,32 +135,32 @@ async def create_chunk(
     except Exception as e:
         logger.exception(f"{str(e)}")
         raise InternalServerError(
-            message="청크 생성에 실패했습니다.",
+            message="그래프 히스토리 생성에 실패했습니다.",
             data=str(e),
         )
 
 
-# 청크 수정
-@router.put("/{chunk_id}", response_model=ResponseModel)
-async def update_chunk(
+# 엣지 수정
+@router.put("/{graph_history_id}", response_model=ResponseModel)
+async def update_graph_history(
     request: Request,
     response: Response,
-    chunk_id: UUID4,
-    chunk: ChunkUpdateRequest,
+    graph_history_id: UUID4,
+    graph_history: GraphHistoryUpdateRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    청크 수정 API
+    그래프 히스토리 수정 API
     """
     try:
-        response_data = await chunk_service.update_chunk(
+        response_data = await graph_history_service.update_graph_history(
             db=db,
-            chunk_id=chunk_id,
-            chunk=chunk,
+            graph_history_id=graph_history_id,
+            graph_history=graph_history,
         )
         return ResponseModel(
             status=http_status.HTTP_200_OK,
-            message="청크 수정에 성공했습니다.",
+            message="그래프 히스토리 수정에 성공했습니다.",
             data=response_data,
         )
     except CustomException as ce:
@@ -187,36 +169,38 @@ async def update_chunk(
     except Exception as e:
         logger.exception(f"{str(e)}")
         raise InternalServerError(
-            message="청크 수정에 실패했습니다.",
+            message="그래프 히스토리 수정에 실패했습니다.",
             data=str(e),
         )
 
 
-# 청크 삭제
+# 그래프 히스토리 삭제
 @router.delete(
-    "/{chunk_id}",
+    "/{graph_history_id}",
     response_model=ResponseModel,
     status_code=http_status.HTTP_200_OK,
 )
-async def delete_chunk(
+async def delete_graph_history(
     request: Request,
     response: Response,
-    chunk_id: UUID4 = Path(..., description="청크 ID"),
-    chunk: ChunkDeleteRequest = Body(..., description="청크 삭제 요청"),
+    graph_history_id: UUID4 = Path(..., description="그래프 히스토리 ID"),
+    graph_history: GraphHistoryDeleteRequest = Body(
+        ..., description="그래프 히스토리 삭제 요청"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    청크 삭제 API
+    그래프 히스토리 삭제 API
     """
     try:
-        response_data = await chunk_service.delete_chunk(
+        response_data = await graph_history_service.delete_graph_history(
             db=db,
-            chunk_id=chunk_id,
-            chunk=chunk,
+            graph_history_id=graph_history_id,
+            graph_history=graph_history,
         )
         return ResponseModel(
             status=http_status.HTTP_200_OK,
-            message="청크 삭제에 성공했습니다.",
+            message="그래프 히스토리 삭제에 성공했습니다.",
             data=response_data,
         )
     except CustomException as ce:
@@ -225,35 +209,35 @@ async def delete_chunk(
     except Exception as e:
         logger.exception(f"{str(e)}")
         raise InternalServerError(
-            message="청크 삭제에 실패했습니다.",
+            message="그래프 히스토리 삭제에 실패했습니다.",
             data=str(e),
         )
 
 
-# 청크 삭제(hard delete)
+# 그래프 히스토리 삭제(hard delete)
 @router.delete(
-    "/{chunk_id}/hard-delete",
+    "/{graph_history_id}/hard-delete",
     response_model=ResponseModel,
     status_code=http_status.HTTP_200_OK,
     include_in_schema=False,
 )
-async def delete_chunks_hard(
+async def delete_graph_histories_hard(
     request: Request,
     response: Response,
-    chunk_id: UUID4 = Path(..., description="청크 ID"),
+    graph_history_id: UUID4 = Path(..., description="그래프 히스토리 ID"),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    청크 삭제(hard delete) API
+    그래프 히스토리 삭제(hard delete) API
     """
     try:
-        response_data = await chunk_service.delete_chunk_hard(
+        response_data = await graph_history_service.delete_graph_history_hard(
             db=db,
-            chunk_id=chunk_id,
+            graph_history_id=graph_history_id,
         )
         return ResponseModel(
             status=http_status.HTTP_200_OK,
-            message="청크 삭제에 성공했습니다.",
+            message="그래프 히스토리 삭제에 성공했습니다.",
             data=response_data,
         )
     except CustomException as ce:
@@ -262,6 +246,6 @@ async def delete_chunks_hard(
     except Exception as e:
         logger.exception(f"{str(e)}")
         raise InternalServerError(
-            message="청크 삭제에 실패했습니다.",
+            message="그래프 히스토리 삭제에 실패했습니다.",
             data=str(e),
         )
