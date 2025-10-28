@@ -36,7 +36,7 @@ export const graphSnippets: GraphSnippet[] = [
             user_prompt: "사용자 질문을 검색에 적합한 형태로 변환하세요:\n{user_input}",
             assistant_prompt: "",
             inputs: {
-              user_input: { type: "reference", value: "user_input" }
+              user_input: { type: "reference", value: "input-1_user_input" }
             }
           },
           output: "search_query"
@@ -48,7 +48,7 @@ export const graphSnippets: GraphSnippet[] = [
             top_k: 4,
             collection: "",
             inputs: {
-              query: { type: "reference", value: "search_query" }
+              query: { type: "reference", value: "prompt-1_search_query" }
             }
           },
           output: "context"
@@ -61,8 +61,8 @@ export const graphSnippets: GraphSnippet[] = [
             user_prompt: "다음 정보를 바탕으로 사용자 질문에 답변하세요:\n\n질문: {user_input}\n\n참고 자료: {context}",
             assistant_prompt: "",
             inputs: {
-              user_input: { type: "reference", value: "user_input" },
-              context: { type: "reference", value: "context" }
+              user_input: { type: "reference", value: "input-1_user_input" },
+              context: { type: "reference", value: "retrieval-1_context" }
             }
           },
           output: "answer"
@@ -73,7 +73,7 @@ export const graphSnippets: GraphSnippet[] = [
           params: {
             wrap_template: "🤖 AI 답변:\n\n{answer}",
             inputs: {
-              answer: { type: "reference", value: "answer" }
+              answer: { type: "reference", value: "prompt-2_answer" }
             }
           },
           output: "agent_output"
@@ -103,7 +103,7 @@ export const graphSnippets: GraphSnippet[] = [
           type: "ConditionNode",
           params: {
             inputs: {
-              answer: { type: "reference", value: "user_input" }
+              answer: { type: "reference", value: "node-1_user_input" }
             },
             conditions: [
               {
@@ -129,7 +129,7 @@ export const graphSnippets: GraphSnippet[] = [
           params: {
             wrap_template: "🤖 AI 답변:\n첫 번째 분기입니다:\n{answer}",
             inputs: {
-              answer: { type: "reference", value: "user_input" }
+              answer: { type: "reference", value: "node-1_user_input" }
             }
           },
           output: "agent_output"
@@ -140,7 +140,7 @@ export const graphSnippets: GraphSnippet[] = [
           params: {
             wrap_template: "🤖 AI 답변:\n두 번째 분기입니다:\n{answer}",
             inputs: {
-              answer: { type: "reference", value: "user_input" }
+              answer: { type: "reference", value: "node-1_user_input" }
             }
           },
           output: "agent_output"
@@ -151,7 +151,7 @@ export const graphSnippets: GraphSnippet[] = [
           params: {
             wrap_template: "🤖 AI 답변:\nElse 분기입니다:\n{answer}",
             inputs: {
-              answer: { type: "reference", value: "user_input" }
+              answer: { type: "reference", value: "node-1_user_input" }
             }
           },
           output: "agent_output"

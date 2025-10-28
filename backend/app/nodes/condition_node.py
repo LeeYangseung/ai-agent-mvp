@@ -163,7 +163,7 @@ class ConditionNode(BaseNode):
 
         # 4. 결과를 state에 저장
         new_state = dict(state)
-        new_state[self.output] = {
+        new_state[self._get_state_key()] = {
             "next_node": next_node,
             "matched_condition": matched_condition,
             "input_vars": input_vars,

@@ -194,6 +194,7 @@ def _create_node(
     if node_type == "InputNode":
         return InputNode(
             output=output,
+            node_id=node_id,
             **params,
         )
 
@@ -203,6 +204,7 @@ def _create_node(
 
         return OutputNode(
             output=output,
+            node_id=node_id,
             wrap_template=wrap_template,
             inputs=inputs,
         )
@@ -215,6 +217,7 @@ def _create_node(
 
         return PromptNode(
             output=output,
+            node_id=node_id,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             assistant_prompt=assistant_prompt,
@@ -229,6 +232,7 @@ def _create_node(
 
         return RetrievalNode(
             output=output,
+            node_id=node_id,
             top_k=top_k,
             collection=collection,
             inputs=inputs,
@@ -241,6 +245,7 @@ def _create_node(
 
         return ConditionNode(
             output=output,
+            node_id=node_id,
             inputs=inputs,
             conditions=conditions,
             default_target=default_target,

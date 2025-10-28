@@ -169,7 +169,7 @@ export function KnowledgeManagementPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">지식 관리</h1>
+        {/* <h1 className="text-2xl font-bold text-gray-800 mb-2">지식 관리</h1> */}
         <p className="text-gray-600">문서의 청킹 및 관리 작업을 수행합니다.</p>
       </div>
 

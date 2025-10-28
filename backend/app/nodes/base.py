@@ -14,16 +14,25 @@ class BaseNode(Runnable):
         self,
         output: str,
         llm: Optional[ChatOpenAI] = None,
+        node_id: Optional[str] = None,
         **kwargs,
     ):
         """
         Args:
             output: 출력을 저장할 state 키
             llm: LLM 인스턴스 (필요한 노드만 사용)
+            node_id: 노드 ID (state 키 생성용)
             **kwargs: 추가 파라미터
         """
         self.output = output
+        self.node_id = node_id
         self.llm = llm
+
+    def _get_state_key(self) -> str:
+        """state에 저장할 키를 생성합니다. {node_id}_{output_key} 형태"""
+        if self.node_id:
+            return f"{self.node_id}_{self.output}"
+        return self.output
 
     def _resolve_inputs(
         self, inputs: Dict[str, Dict[str, str]], state: Dict[str, Any]
@@ -49,13 +58,8 @@ class BaseNode(Runnable):
                 input_vars[var_name] = var_value
             elif var_type == "reference":
                 # state에서 참조
-                # "node-id.output" 형식 지원 (현재는 flat state이므로 output만 사용)
-                if "." in var_value:
-                    # node_id.output 형식
-                    _, key = var_value.rsplit(".", 1)
-                    actual_key = key
-                else:
-                    actual_key = var_value
+                # "node_id_output_key" 형식 지원 (새로운 키 형식)
+                actual_key = var_value
 
                 if actual_key and actual_key not in state:
                     logger.warning(

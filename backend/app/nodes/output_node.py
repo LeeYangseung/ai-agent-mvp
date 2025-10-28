@@ -85,7 +85,7 @@ class OutputNode(BaseNode):
                 )
 
         # 4. output에 최종 출력 저장
-        new_state[self.output] = formatted_output
+        new_state[self._get_state_key()] = formatted_output
 
         logger.info(
             f"OutputNode({self.output}): "

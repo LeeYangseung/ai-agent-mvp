@@ -42,7 +42,7 @@ class InputNode(BaseNode):
             input_value = state.get("input", "")
 
         # 3. output에 입력 데이터 저장 (기본: user_input)
-        new_state[self.output] = input_value
+        new_state[self._get_state_key()] = input_value
 
         return new_state
 
