@@ -172,10 +172,119 @@ async def run_graph(graph_json: Dict[str, Any], llm):
 
     # 6. 실행
     logger.info(f"Executing graph with input_state: {input_state}")
+    input_state["graph_status"] = "success"
     final_state = await app.ainvoke(input_state)
     logger.info("Graph execution completed")
 
-    return final_state
+    # 7. 구조화된 결과 생성
+    structured_results = _transform_final_state_to_structured(
+        final_state, nodes
+    )
+
+    return {
+        "final_state": final_state,  # 기존 호환성 유지
+        "structured_results": structured_results,  # 새로운 구조화된 데이터
+    }
+
+
+def _transform_final_state_to_structured(
+    final_state: Dict[str, Any], nodes: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    final_state를 구조화된 형태로 변환
+
+    Args:
+        final_state: LangGraph 실행 결과 상태
+        nodes: 그래프 노드 정의 리스트
+
+    Returns:
+        구조화된 결과 데이터
+    """
+    results = []
+
+    for node in nodes:
+        node_id = node["id"]
+        node_type = node["type"]
+        node_params = node.get("params", {})
+        output_key = node.get("output", "output")
+
+        # 입력값 추출
+        inputs = {}
+        node_inputs = node_params.get("inputs", {})
+        for input_key, input_config in node_inputs.items():
+            if (
+                isinstance(input_config, dict)
+                and input_config.get("type") == "reference"
+            ):
+                ref_key = input_config["value"]
+                # final_state에서 참조값 찾기
+                inputs[input_key] = final_state.get(ref_key, "")
+            else:
+                # 직접 값인 경우
+                inputs[input_key] = input_config
+
+        # 출력값 추출
+        outputs = {}
+        state_key = f"{node_id}_{output_key}"
+        if state_key in final_state:
+            outputs[output_key] = final_state[state_key]
+        else:
+            # fallback: output_key로 직접 찾기
+            if output_key in final_state:
+                outputs[output_key] = final_state[output_key]
+
+        # 노드별 특수 처리
+        if node_type == "InputNode":
+            # InputNode는 사용자 입력을 그대로 출력
+            inputs["user_input"] = final_state.get(
+                "input", final_state.get("user_input", "")
+            )
+            outputs[output_key] = inputs["user_input"]
+        elif node_type == "ConditionNode":
+            # ConditionNode는 조건 평가 결과 추가
+            condition_result = final_state.get("__next__", "")
+            outputs["condition_result"] = condition_result
+            outputs["evaluated_condition"] = condition_result
+
+        # 상태 결정 (output에 에러 메시지가 있는지 확인)
+        has_error = False
+        error_message = None
+
+        # output 값들을 확인하여 에러 메시지가 있는지 체크
+        for output_key, output_value in outputs.items():
+            if isinstance(output_value, str) and output_value.startswith(
+                "[ERROR]"
+            ):
+                has_error = True
+                error_message = output_value.replace("[ERROR]", "").strip()
+                break
+        if has_error:
+            status = "failed"
+        elif outputs:  # output이 있으면 실행됨
+            status = "success"
+        else:  # output이 없으면 실행되지 않음
+            status = "pending"
+
+        results.append(
+            {
+                "node_id": node_id,
+                "type": node_type,
+                "inputs": inputs,
+                "outputs": outputs,
+                "status": status,
+                "error_message": error_message,
+            }
+        )
+
+    return {
+        "results": results,
+        "execution_info": {
+            "total_nodes": len(nodes),
+            "executed_nodes": len(
+                [r for r in results if r["status"] != "pending"]
+            ),
+        },
+    }
 
 
 def _create_node(
@@ -188,8 +297,6 @@ def _create_node(
 ):
     """
     노드 타입에 따라 적절한 노드 인스턴스 생성
-
-    하위 호환성을 위한 변환 로직 포함
     """
     if node_type == "InputNode":
         return InputNode(

@@ -30,21 +30,28 @@ class InputNode(BaseNode):
         Returns:
             업데이트된 state
         """
-        # 1. 기존 state 복사
-        new_state = dict(state)
+        try:
+            # 0. 그래프 상태 확인
+            if state.get("graph_status") == "failed":
+                return state
+            # 1. 기존 state 복사
+            new_state = dict(state)
 
-        # 2. input_data가 있으면 사용, 없으면 state에서 "input" 키로 찾기
-        if self.input_data is not None:
-            input_value = self.input_data
-        else:
-            # 외부에서 전달된 입력 데이터를 state에서 찾기
-            # 일반적으로 "input" 키로 전달됨
-            input_value = state.get("input", "")
+            # 2. input_data가 있으면 사용, 없으면 state에서 "input" 키로 찾기
+            if self.input_data is not None:
+                input_value = self.input_data
+            else:
+                # 외부에서 전달된 입력 데이터를 state에서 찾기
+                # 일반적으로 "input" 키로 전달됨
+                input_value = state.get("input", "")
 
-        # 3. output에 입력 데이터 저장 (기본: user_input)
-        new_state[self._get_state_key()] = input_value
+            # 3. output에 입력 데이터 저장 (기본: user_input)
+            new_state[self._get_state_key()] = input_value
 
-        return new_state
+            return new_state
+
+        except Exception as e:
+            return self._handle_error(e, state)
 
     def set_input_data(self, data: Any):
         """런타임에 입력 데이터 설정"""

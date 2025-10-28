@@ -72,6 +72,29 @@ class BaseNode(Runnable):
 
         return input_vars
 
+    def _handle_error(
+        self, error: Exception, state: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        에러를 처리하고 [ERROR] 형식으로 output에 저장하는 공통 메서드
+
+        Args:
+            error: 발생한 예외
+            state: 현재 그래프 상태
+
+        Returns:
+            에러 메시지가 포함된 새로운 state
+        """
+        error_message = f"[ERROR] {str(error)}"
+        logger.error(
+            f"{self.__class__.__name__}({self.output}): {error_message}"
+        )
+
+        new_state = dict(state)
+        new_state[self._get_state_key()] = error_message
+        new_state["graph_status"] = "failed"
+        return new_state
+
     @abstractmethod
     def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
         pass

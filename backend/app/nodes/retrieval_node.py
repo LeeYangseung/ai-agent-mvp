@@ -47,39 +47,36 @@ class RetrievalNode(BaseNode):
             )
 
     def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
-        # 1. BaseNode의 공통 메서드로 inputs 처리
-        input_vars = self._resolve_inputs(self.inputs, state)
-
-        # 2. query 추출 (우선순위: "query" 키 → 첫 번째 input)
-        query = ""
-        if "query" in input_vars:
-            query = input_vars["query"]
-        elif input_vars:
-            # query가 없으면 첫 번째 input 사용
-            first_key = next(iter(input_vars))
-            query = input_vars[first_key]
-            logger.info(
-                f"RetrievalNode({self.output}): "
-                f"Using '{first_key}' as query (no 'query' key found)"
-            )
-
-        if not query:
-            # 디버깅을 위한 상세 정보
-            logger.error(f"RetrievalNode({self.output}): Query not found")
-            logger.error(f"  - inputs config: {self.inputs}")
-            logger.error(f"  - resolved input_vars: {input_vars}")
-            logger.error(f"  - state keys: {list(state.keys())}")
-
-            raise ValueError(
-                f"RetrievalNode({self.output}): "
-                f"Query not found. "
-                f"Available inputs: {list(self.inputs.keys())}, "
-                f"Resolved values: {input_vars}, "
-                f"State keys: {list(state.keys())}"
-            )
-
-        # 3. 벡터 검색 수행
         try:
+            # 0. 그래프 상태 확인
+            if state.get("graph_status") == "failed":
+                return state
+            # 1. BaseNode의 공통 메서드로 inputs 처리
+            input_vars = self._resolve_inputs(self.inputs, state)
+
+            # 2. query 추출 (우선순위: "query" 키 → 첫 번째 input)
+            query = ""
+            if "query" in input_vars:
+                query = input_vars["query"]
+            elif input_vars:
+                # query가 없으면 첫 번째 input 사용
+                first_key = next(iter(input_vars))
+                query = input_vars[first_key]
+                logger.info(
+                    f"RetrievalNode({self.output}): "
+                    f"Using '{first_key}' as query (no 'query' key found)"
+                )
+
+            if not query:
+                raise ValueError(
+                    f"RetrievalNode({self.output}): "
+                    f"Query not found. "
+                    f"Available inputs: {list(self.inputs.keys())}, "
+                    f"Resolved values: {input_vars}, "
+                    f"State keys: {list(state.keys())}"
+                )
+
+            # 3. 벡터 검색 수행
             logger.debug(
                 f"RetrievalNode({self.output}): "
                 f"Searching with query='{query[:50]}...', top_k={self.top_k}"
@@ -110,11 +107,7 @@ class RetrievalNode(BaseNode):
             return new_state
 
         except Exception as e:
-            logger.error(
-                f"RetrievalNode({self.output}): "
-                f"Vector search failed: {str(e)}"
-            )
-            raise RuntimeError(f"Vector search failed: {str(e)}")
+            return self._handle_error(e, state)
 
     def similarity_search_with_score(
         self, query: str, k: int = None

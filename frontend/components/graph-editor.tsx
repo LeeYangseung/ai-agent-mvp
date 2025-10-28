@@ -17,11 +17,13 @@ import BaseNode from "./node";
 import { runGraph, getGraph, createGraph, updateGraph } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { GraphSnippet, graphSnippets } from "./graph-snippet";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, ChevronDown, ChevronRight, Eye, History, Database } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const nodeTypes = { BaseNode };
 
@@ -29,6 +31,7 @@ const nodeTypes = { BaseNode };
 type ChatMessage = {
   role: "user" | "agent";
   content: string;
+  timestamp?: Date;
 };
 
 // ------------------------------------------------------------
@@ -106,7 +109,48 @@ function GraphInfoDialog({
 }
 
 // ------------------------------------------------------------
-// 채팅 UI
+// 확장 가능한 패널 컴포넌트
+// ------------------------------------------------------------
+function ExpandablePanel({
+  title,
+  icon: Icon,
+  children,
+  isExpanded,
+  onToggle,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="border-b">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50"
+      >
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4" />
+          <span className="text-sm font-medium">{title}</span>
+        </div>
+        {isExpanded ? (
+          <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
+      </button>
+      {isExpanded && (
+        <div className="p-3 bg-gray-50 max-h-60 overflow-y-auto">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// 개선된 채팅 UI
 // ------------------------------------------------------------
 function ChatPanel({
   messages,
@@ -118,6 +162,9 @@ function ChatPanel({
   isRunning: boolean;
 }) {
   const [input, setInput] = useState("");
+  const [showNodeDetails, setShowNodeDetails] = useState(false);
+  const [showGraphHistory, setShowGraphHistory] = useState(false);
+  const [showGraphState, setShowGraphState] = useState(false);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -125,27 +172,333 @@ function ChatPanel({
     setInput("");
   };
 
+  // Agent 답변만 추출
+  const getAgentResponse = (message: ChatMessage) => {
+    if (message.role === "user") return null;
+    
+    try {
+      const parsed = JSON.parse(message.content);
+      
+      if (parsed.results && Array.isArray(parsed.results)) {
+        // 그래프 실행 실패 확인
+        const failedNode = parsed.results.find((node: any) => 
+          node.outputs && Object.values(node.outputs).some((output: any) => 
+            typeof output === 'string' && output.startsWith('[ERROR]')
+          )
+        );
+        
+        if (failedNode) {
+          const errorOutput = Object.values(failedNode.outputs).find((output: any) => 
+            typeof output === 'string' && output.startsWith('[ERROR]')
+          ) as string;
+          const errorMessage = errorOutput?.replace('[ERROR]', '').trim() || '알 수 없는 오류가 발생했습니다.';
+          return `❌ **그래프 실행 실패**\n\n${errorMessage}`;
+        }
+        
+        // OutputNode에서 agent_output 찾기
+        const outputNode = parsed.results.find((node: any) => 
+          node.type === "OutputNode" && node.outputs?.agent_output
+        );
+        return outputNode?.outputs?.agent_output || null;
+      }
+      
+      return null;
+    } catch {
+      return message.content;
+    }
+  };
+
+  // 노드별 상세 정보 추출
+  const getNodeDetails = (message: ChatMessage) => {
+    if (message.role === "user") return null;
+    
+    try {
+      const parsed = JSON.parse(message.content);
+      
+      if (parsed.results && Array.isArray(parsed.results)) {
+        return parsed.results.reduce((acc: any, node: any) => {
+          acc[node.node_id] = {
+            type: node.type,
+            input: node.inputs,
+            output: node.outputs,
+            status: node.status,
+            error_message: node.error_message
+          };
+          return acc;
+        }, {});
+      }
+      
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // 그래프 히스토리 추출
+  const getGraphHistory = (message: ChatMessage) => {
+    if (message.role === "user") return null;
+    
+    try {
+      const parsed = JSON.parse(message.content);
+      
+      if (parsed.results && Array.isArray(parsed.results)) {
+        const executionInfo = parsed.execution_info || {};
+        return [
+          { timestamp: new Date(), action: 'Graph Execution Started' },
+          { timestamp: new Date(), action: `Executed ${executionInfo.executed_nodes || parsed.results.length} nodes` },
+          { timestamp: new Date(), action: 'Graph Execution Completed' }
+        ];
+      }
+      
+      return [{ timestamp: new Date(), action: 'Graph Execution' }];
+    } catch {
+      return [{ timestamp: new Date(), action: 'Graph Execution' }];
+    }
+  };
+
+  // 그래프 스테이트 추출
+  const getGraphState = (message: ChatMessage) => {
+    if (message.role === "user") return null;
+    
+    try {
+      const parsed = JSON.parse(message.content);
+      
+      if (parsed.results && Array.isArray(parsed.results)) {
+        return {
+          structured_results: parsed.results,
+          execution_info: parsed.execution_info,
+          final_state: parsed.final_state
+        };
+      }
+      
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <div className="flex flex-col border-l bg-white w-80 h-full max-h-screen">
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 max-h-full">
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`p-2 rounded-lg text-sm max-w-[80%] ${
-              m.role === "user"
-                ? "bg-blue-100 self-end ml-auto"
-                : "bg-gray-100 self-start"
-            }`}
-          >
-            {m.content}
-          </div>
-        ))}
+      {/* 패널 토글 버튼들 */}
+      <div className="flex border-b bg-gray-50 p-2 gap-1">
+        <Button
+          variant={showNodeDetails ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowNodeDetails(!showNodeDetails)}
+          className="flex-1 text-xs"
+        >
+          <Eye className="h-3 w-3 mr-1" />
+          노드
+        </Button>
+        <Button
+          variant={showGraphHistory ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowGraphHistory(!showGraphHistory)}
+          className="flex-1 text-xs"
+        >
+          <History className="h-3 w-3 mr-1" />
+          히스토리
+        </Button>
+        <Button
+          variant={showGraphState ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowGraphState(!showGraphState)}
+          className="flex-1 text-xs"
+        >
+          <Database className="h-3 w-3 mr-1" />
+          스테이트
+        </Button>
       </div>
 
-      {/* ✅ form 으로 감싸고 onSubmit에서만 handleSend 실행 */}
+      {/* 채팅 영역 */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {messages.length === 0 ? (
+          /* 채팅이 시작되기 전: 안내 메시지 */
+          <div className="flex items-center justify-center h-full p-4">
+            <div className="text-center text-gray-500">
+              <div className="text-lg mb-2">🤖 AI Agent</div>
+              <div className="text-sm">아래에서 메시지를 입력하여 그래프를 실행해보세요</div>
+            </div>
+          </div>
+        ) : (
+          /* 채팅 메시지들 */
+          <div>
+            {messages.map((m, i) => {
+              const agentResponse = getAgentResponse(m);
+              const nodeDetails = getNodeDetails(m);
+              const graphHistory = getGraphHistory(m);
+              const graphState = getGraphState(m);
+
+              return (
+                <div key={i} className="border-b">
+                  {/* 사용자 메시지 */}
+                  {m.role === "user" && (
+                    <div className="p-3 bg-blue-50">
+                      <div className="text-sm font-medium text-blue-800 mb-1">사용자</div>
+                      <div className="text-sm">{m.content}</div>
+                    </div>
+                  )}
+
+                  {/* Agent 답변 */}
+                  {m.role === "agent" && agentResponse && (
+                    <div className="p-3 bg-gray-50">
+                      <div className="text-sm font-medium text-gray-800 mb-2">AI 답변</div>
+                      <div className="prose text-sm max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {agentResponse}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 확장 가능한 패널들 */}
+                  {m.role === "agent" && (
+                    <div className="bg-white">
+                      {nodeDetails && (
+                        <ExpandablePanel
+                          title="노드별 입출력"
+                          icon={Eye}
+                          isExpanded={showNodeDetails}
+                          onToggle={() => setShowNodeDetails(!showNodeDetails)}
+                        >
+                          <div className="space-y-2 text-xs">
+                            {Object.entries(nodeDetails).map(([nodeId, details]: [string, any]) => (
+                              <div key={nodeId} className="border rounded p-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="font-medium text-gray-700">{nodeId}</div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs px-1 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                      {details.type}
+                                    </span>
+                                  {details.status && (
+                                    <span className={`text-xs px-1 py-0.5 rounded ${
+                                      details.status === 'success' 
+                                        ? 'bg-green-100 text-green-700' 
+                                        : details.status === 'failed'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      {details.status === 'pending' ? 'pending' : details.status}
+                                    </span>
+                                  )}
+                                  </div>
+                                </div>
+                                
+                                {/* 입력값 표시 */}
+                                {details.input && Object.keys(details.input).length > 0 && (
+                                  <div className="mt-2">
+                                    <div className="text-gray-600 mb-1">입력:</div>
+                                    <div className="space-y-1">
+                                      {Object.entries(details.input).map(([key, value]: [string, any]) => (
+                                        <div key={key} className="bg-blue-50 p-1 rounded text-xs">
+                                          <span className="font-medium text-blue-800">{key}:</span>
+                                          <span className="ml-1">
+                                            {typeof value === 'string' 
+                                              ? value.substring(0, 80) + (value.length > 80 ? '...' : '')
+                                              : JSON.stringify(value).substring(0, 80) + '...'
+                                            }
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* 출력값 표시 */}
+                                {details.output && Object.keys(details.output).length > 0 && (
+                                  <div className="mt-2">
+                                    <div className="text-gray-600 mb-1">출력:</div>
+                                    <div className="space-y-1">
+                                      {Object.entries(details.output).map(([key, value]: [string, any]) => (
+                                        <div key={key} className="bg-green-50 p-1 rounded text-xs">
+                                          <span className="font-medium text-green-800">{key}:</span>
+                                          <span className="ml-1">
+                                            {typeof value === 'string' 
+                                              ? value.substring(0, 80) + (value.length > 80 ? '...' : '')
+                                              : JSON.stringify(value).substring(0, 80) + '...'
+                                            }
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* 에러 메시지 표시 */}
+                                {details.error_message && (
+                                  <div className="mt-2">
+                                    <div className="text-gray-600 mb-1">에러:</div>
+                                    <div className="bg-red-50 p-2 rounded text-xs border border-red-200">
+                                      <div className="font-medium text-red-800 mb-1">❌ 실행 실패</div>
+                                      <div className="text-red-700">
+                                        {details.error_message}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Pending 상태 안내 */}
+                                {details.status === 'pending' && (
+                                  <div className="mt-2">
+                                    <div className="bg-yellow-50 p-2 rounded text-xs border border-yellow-200">
+                                      <div className="font-medium text-yellow-800 mb-1">⏳ 실행 대기</div>
+                                      <div className="text-yellow-700">
+                                        이전 노드에서 오류가 발생하여 실행되지 않았습니다.
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </ExpandablePanel>
+                      )}
+
+                      {graphHistory && (
+                        <ExpandablePanel
+                          title="그래프 히스토리"
+                          icon={History}
+                          isExpanded={showGraphHistory}
+                          onToggle={() => setShowGraphHistory(!showGraphHistory)}
+                        >
+                          <div className="space-y-1 text-xs">
+                            {graphHistory.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center p-1 bg-gray-100 rounded">
+                                <span>{item.action}</span>
+                                <span className="text-gray-500">
+                                  {item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : '방금 전'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </ExpandablePanel>
+                      )}
+
+                      {graphState && (
+                        <ExpandablePanel
+                          title="그래프 스테이트"
+                          icon={Database}
+                          isExpanded={showGraphState}
+                          onToggle={() => setShowGraphState(!showGraphState)}
+                        >
+                          <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                            {JSON.stringify(graphState, null, 2)}
+                          </pre>
+                        </ExpandablePanel>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 입력 폼 - 항상 맨 아래에 고정 */}
       <form
         onSubmit={(e) => {
-          e.preventDefault(); // 기본 submit 막기
+          e.preventDefault();
           handleSend();
         }}
         className="border-t p-2 flex space-x-2 flex-shrink-0 bg-white"
@@ -153,11 +506,11 @@ function ChatPanel({
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
+          placeholder="메시지를 입력하세요..."
           className="flex-1 border rounded px-2 py-1 text-sm"
         />
         <Button type="submit" disabled={isRunning}>
-          {isRunning ? "..." : "Send"}
+          {isRunning ? "..." : "전송"}
         </Button>
       </form>
     </div>
@@ -426,7 +779,7 @@ export function GraphEditor({
         console.log('그래프 생성 성공:', response);
         alert('그래프가 성공적으로 생성되었습니다.');
         if (onBack) {
-          onBack(true); // 목록 화면 리프레시를 위해 true 전달
+          onBack();
         }
       } else if (graphId) {
         // 기존 그래프 업데이트
@@ -435,7 +788,7 @@ export function GraphEditor({
         console.log('그래프 업데이트 성공:', response);
         alert('그래프가 성공적으로 저장되었습니다.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('그래프 저장 실패:', error);
       console.error('에러 상세:', error.response?.data);
       console.error('에러 상태:', error.response?.status);
@@ -645,7 +998,7 @@ export function GraphEditor({
     const newNode: Node = {
       id: `node-${nodes.length + 1}`,
       type: "BaseNode",
-      position: { x: 100 + nodes.length + 350, y: 200 },
+      position: { x: 100 + nodes.length * 350, y: 200 },
       data: {
         nodeType: "OutputNode",
         wrap_template: "🤖 AI 답변:\n\n{answer}\n\n---\n질문: {user_input}",
@@ -771,7 +1124,11 @@ export function GraphEditor({
 
   // 유저가 메시지 입력했을 때 → 그래프 실행
   const onSendMessage = async (userInput: string) => {
-    setMessages((msgs) => [...msgs, { role: "user", content: userInput }]);
+    setMessages((msgs) => [...msgs, { 
+      role: "user", 
+      content: userInput,
+      timestamp: new Date()
+    }]);
     setIsRunning(true);
   
     try {
@@ -866,16 +1223,41 @@ export function GraphEditor({
       };
   
       const res = await runGraph(graph);
-  
+      
       setMessages((msgs) => [
         ...msgs,
-        { role: "agent", content: JSON.stringify(res.results ?? res, null, 2) },
+        { 
+          role: "agent", 
+          content: JSON.stringify(res.results, null, 2),
+          timestamp: new Date()
+        },
       ]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to run graph:", error);
+      
+      // 에러 발생 시에도 구조화된 데이터로 응답
+      const errorResults = nodes.map((node, index) => ({
+        node_id: node.id,
+        type: node.type,
+        inputs: {},
+        outputs: {},
+        status: "pending",
+        error_message: null
+      }));
+      
       setMessages((msgs) => [
         ...msgs,
-        { role: "agent", content: "⚠️ Failed to run graph" },
+        { 
+          role: "agent", 
+          content: JSON.stringify({
+            results: errorResults,
+            execution_info: {
+              total_nodes: nodes.length,
+              executed_nodes: 0,
+            }
+          }),
+          timestamp: new Date()
+        },
       ]);
     } finally {
       setIsRunning(false);
