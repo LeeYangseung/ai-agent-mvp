@@ -109,70 +109,77 @@ class ConditionNode(BaseNode):
         Returns:
             state에 다음 노드 정보 추가
         """
-        # 1. BaseNode의 공통 메서드로 inputs 처리
-        input_vars = self._resolve_inputs(self.inputs, state)
+        try:
+            # 0. 그래프 상태 확인
+            if state.get("graph_status") == "failed":
+                return state
+            # 1. BaseNode의 공통 메서드로 inputs 처리
+            input_vars = self._resolve_inputs(self.inputs, state)
 
-        # 2. 각 조건을 순서대로 평가
-        next_node = None
-        matched_condition = None
+            # 2. 각 조건을 순서대로 평가
+            next_node = None
+            matched_condition = None
 
-        for i, condition in enumerate(self.conditions):
-            variable_name = condition.get("variable", "")
-            operator = condition.get("operator", "==")
-            compare_value = condition.get("value", "")
-            target = condition.get("target", "")
+            for i, condition in enumerate(self.conditions):
+                variable_name = condition.get("variable", "")
+                operator = condition.get("operator", "==")
+                compare_value = condition.get("value", "")
+                target = condition.get("target", "")
 
-            # input_vars에서 변수 값 가져오기
-            if variable_name not in input_vars:
-                logger.warning(
-                    f"ConditionNode({self.output}): "
-                    f"Variable '{variable_name}' not found in inputs. "
-                    f"Available: {list(input_vars.keys())}"
+                # input_vars에서 변수 값 가져오기
+                if variable_name not in input_vars:
+                    logger.warning(
+                        f"ConditionNode({self.output}): "
+                        f"Variable '{variable_name}' not found in inputs. "
+                        f"Available: {list(input_vars.keys())}"
+                    )
+                    continue
+
+                variable_value = input_vars[variable_name]
+
+                # 조건 평가
+                is_satisfied = self._evaluate_condition(
+                    variable_value, operator, compare_value
                 )
-                continue
 
-            variable_value = input_vars[variable_name]
+                logger.debug(
+                    f"ConditionNode({self.output}): "
+                    f"Condition {i+1}: '{variable_name}' ({variable_value}) "
+                    f"{operator} '{compare_value}' = {is_satisfied}"
+                )
 
-            # 조건 평가
-            is_satisfied = self._evaluate_condition(
-                variable_value, operator, compare_value
-            )
+                if is_satisfied:
+                    next_node = target
+                    matched_condition = i
+                    logger.info(
+                        f"ConditionNode({self.output}): "
+                        f"Condition {i+1} matched, routing to '{target}'"
+                    )
+                    break
 
-            logger.debug(
-                f"ConditionNode({self.output}): "
-                f"Condition {i+1}: '{variable_name}' ({variable_value}) "
-                f"{operator} '{compare_value}' = {is_satisfied}"
-            )
-
-            if is_satisfied:
-                next_node = target
-                matched_condition = i
+            # 3. 조건 불만족 시 default_target 사용
+            if next_node is None:
+                next_node = self.default_target
                 logger.info(
                     f"ConditionNode({self.output}): "
-                    f"Condition {i+1} matched, routing to '{target}'"
+                    f"No condition matched, routing to default '{next_node}'"
                 )
-                break
 
-        # 3. 조건 불만족 시 default_target 사용
-        if next_node is None:
-            next_node = self.default_target
-            logger.info(
-                f"ConditionNode({self.output}): "
-                f"No condition matched, routing to default '{next_node}'"
-            )
+            # 4. 결과를 state에 저장
+            new_state = dict(state)
+            new_state[self._get_state_key()] = {
+                "next_node": next_node,
+                "matched_condition": matched_condition,
+                "input_vars": input_vars,
+            }
 
-        # 4. 결과를 state에 저장
-        new_state = dict(state)
-        new_state[self._get_state_key()] = {
-            "next_node": next_node,
-            "matched_condition": matched_condition,
-            "input_vars": input_vars,
-        }
+            # 5. 라우팅 정보를 특별한 키에 저장 (graph_runner가 사용)
+            new_state["__next__"] = next_node
 
-        # 5. 라우팅 정보를 특별한 키에 저장 (graph_runner가 사용)
-        new_state["__next__"] = next_node
+            return new_state
 
-        return new_state
+        except Exception as e:
+            return self._handle_error(e, state)
 
     def get_next_node(self, state: Dict[str, Any]) -> str:
         """

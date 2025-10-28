@@ -33,7 +33,12 @@ router = APIRouter()
 async def run_graph_api(req: GraphRunRequest, llm=Depends(get_llm)):
     logger.info(f"Running graph: {req.dict()}")
     result = await run_graph(req.dict(), llm)
-    return {"results": result}
+
+    # 구조화된 응답 반환
+    return {
+        "results": result["structured_results"],  # 새로운 구조화된 데이터
+        "final_state": result["final_state"],  # 기존 호환성을 위한 원본 데이터
+    }
 
 
 @router.get("", response_model=ResponseModel)
