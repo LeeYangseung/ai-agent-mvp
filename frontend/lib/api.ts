@@ -1,9 +1,45 @@
 import axios from "axios";
 
-const API_BASE = "http://0.0.0.0:8000/v1"; // FastAPI 백엔드 주소
+// 런타임 구성 값을 캐싱하여 최초 1회만 조회
+let cachedApiBase: string | null = null;
+let loadingPromise: Promise<string> | null = null;
+
+async function getApiBase(): Promise<string> {
+  if (cachedApiBase) return cachedApiBase;
+  if (loadingPromise) return loadingPromise;
+
+  loadingPromise = (async () => {
+    try {
+      // 프론트 런타임 설정을 가져옴 (ConfigMap에서 주입된 컨테이너 env를 읽어 전달)
+      const res = await fetch("/runtime-config", { cache: "no-store" });
+      const data = (await res.json()) as { apiBaseUrl?: string };
+
+      // 1순위: ConfigMap에서 온 값
+      if (data?.apiBaseUrl && data.apiBaseUrl.trim().length > 0) {
+        cachedApiBase = data.apiBaseUrl;
+        return cachedApiBase;
+      }
+
+      // 2순위: 브라우저 호스트 기반 자동 구성
+      if (typeof window !== "undefined") {
+        cachedApiBase = `${window.location.origin}/api/v1`;
+        return cachedApiBase;
+      }
+
+      // 3순위: 서버 사이드 기본값 (개발용)
+      cachedApiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000/api/v1";
+      return cachedApiBase;
+    } finally {
+      loadingPromise = null;
+    }
+  })();
+
+  return loadingPromise;
+}
 
 export async function runGraph(graph: any) {
-  const res = await axios.post(`${API_BASE}/graphs/run-graph`, graph);
+  const base = await getApiBase();
+  const res = await axios.post(`${base}/graphs/run-graph`, graph);
   return res.data;
 }
 
@@ -34,6 +70,7 @@ export interface DocumentFilters {
 }
 
 export async function getDocuments(filters: DocumentFilters = {}) {
+  const base = await getApiBase();
   const params = new URLSearchParams();
   
   Object.entries(filters).forEach(([key, value]) => {
@@ -43,7 +80,7 @@ export async function getDocuments(filters: DocumentFilters = {}) {
   });
 
   // 디버깅을 위해 URL 출력
-  const url = `${API_BASE}/documents?${params.toString()}`;
+  const url = `${base}/documents?${params.toString()}`;
   console.log('API 요청 URL:', url);
 
   const res = await axios.get(url);
@@ -51,12 +88,14 @@ export async function getDocuments(filters: DocumentFilters = {}) {
 }
 
 export async function getDocument(documentId: string) {
-  const res = await axios.get(`${API_BASE}/documents/${documentId}`);
+  const base = await getApiBase();
+  const res = await axios.get(`${base}/documents/${documentId}`);
   return res.data;
 }
 
 export async function createDocument(document: Partial<Document> | FormData) {
-  const res = await axios.post(`${API_BASE}/documents`, document, {
+  const base = await getApiBase();
+  const res = await axios.post(`${base}/documents`, document, {
     headers: document instanceof FormData ? {
       'Content-Type': 'multipart/form-data',
     } : {
@@ -67,12 +106,14 @@ export async function createDocument(document: Partial<Document> | FormData) {
 }
 
 export async function updateDocument(documentId: string, document: Partial<Document>) {
-  const res = await axios.put(`${API_BASE}/documents/${documentId}`, document);
+  const base = await getApiBase();
+  const res = await axios.put(`${base}/documents/${documentId}`, document);
   return res.data;
 }
 
 export async function deleteDocument(documentId: string) {
-  const res = await axios.delete(`${API_BASE}/documents/${documentId}`, {
+  const base = await getApiBase();
+  const res = await axios.delete(`${base}/documents/${documentId}`, {
     data: {
       updated_by: "admin"
     }
@@ -98,7 +139,8 @@ export interface DocumentDetail extends Document {
 
 // 문서 상세 조회 (청크 목록 포함)
 export async function getDocumentDetail(documentId: string) {
-  const res = await axios.get(`${API_BASE}/documents/${documentId}`);
+  const base = await getApiBase();
+  const res = await axios.get(`${base}/documents/${documentId}`);
   return res.data;
 }
 
@@ -124,6 +166,7 @@ export interface GraphFilters {
 }
 
 export async function getGraphs(filters: GraphFilters = {}) {
+  const base = await getApiBase();
   const params = new URLSearchParams();
   
   Object.entries(filters).forEach(([key, value]) => {
@@ -132,7 +175,7 @@ export async function getGraphs(filters: GraphFilters = {}) {
     }
   });
 
-  const url = `${API_BASE}/graphs?${params.toString()}`;
+  const url = `${base}/graphs?${params.toString()}`;
   console.log('그래프 API 요청 URL:', url);
 
   const res = await axios.get(url);
@@ -140,14 +183,16 @@ export async function getGraphs(filters: GraphFilters = {}) {
 }
 
 export async function getGraph(graphId: string) {
-  const res = await axios.get(`${API_BASE}/graphs/${graphId}`);
+  const base = await getApiBase();
+  const res = await axios.get(`${base}/graphs/${graphId}`);
   return res.data;
 }
 
 export async function createGraph(graph: Partial<Graph> & { nodes?: any[], edges?: any[] }) {
   console.log('createGraph API 호출:', graph);
   try {
-    const res = await axios.post(`${API_BASE}/graphs`, graph);
+    const base = await getApiBase();
+    const res = await axios.post(`${base}/graphs`, graph);
     console.log('createGraph API 응답:', res.data);
     return res.data;
   } catch (error) {
@@ -157,12 +202,14 @@ export async function createGraph(graph: Partial<Graph> & { nodes?: any[], edges
 }
 
 export async function updateGraph(graphId: string, graph: Partial<Graph> & { nodes?: any[], edges?: any[] }) {
-  const res = await axios.put(`${API_BASE}/graphs/${graphId}`, graph);
+  const base = await getApiBase();
+  const res = await axios.put(`${base}/graphs/${graphId}`, graph);
   return res.data;
 }
 
 export async function deleteGraph(graphId: string) {
-  const res = await axios.delete(`${API_BASE}/graphs/${graphId}`, {
+  const base = await getApiBase();
+  const res = await axios.delete(`${base}/graphs/${graphId}`, {
     data: {
       updated_by: "admin"
     }
