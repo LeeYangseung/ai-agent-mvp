@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-agent-backend-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-agent-backend
+  template:
+    metadata:
+      labels:
+        app: ai-agent-backend
+    spec:
+      containers:
+        - name: ai-agent-backend
+          image: ai-agent-backend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: DATABASE_URL
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: LOG_LEVEL
+            - name: ROOT_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: ROOT_PATH
+            - name: OPENAPI_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: OPENAPI_URL
+            - name: DOCS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: DOCS_URL
+            - name: REDOC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: REDOC_URL
+            - name: OPENAI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-agent-secrets
+                  key: OPENAI_SECRET_KEY
+            - name: VECTOR_STORE_DATA_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: VECTOR_STORE_DATA_DIR
+            - name: ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-agent-config
+                  key: ENV
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: 8000
+          #   initialDelaySeconds: 30
+          #   periodSeconds: 10
+          #   timeoutSeconds: 5
+          #   failureThreshold: 3
+          # readinessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: 8000
+          #   initialDelaySeconds: 5
+          #   periodSeconds: 5
+          #   timeoutSeconds: 3
+          #   failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-agent-backend-service
+spec:
+  type: ClusterIP
+  selector:
+    app: ai-agent-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
