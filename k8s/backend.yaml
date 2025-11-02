@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-agent-backend-deployment
+  name: ai-agent-backend
 spec:
   replicas: 1
   selector:
@@ -25,6 +25,9 @@ spec:
             limits:
               cpu: 1000m
               memory: 1Gi
+          volumeMounts:
+            - name: vectorstore-storage
+              mountPath: /workspace/app/data
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -87,6 +90,10 @@ spec:
           #   periodSeconds: 5
           #   timeoutSeconds: 3
           #   failureThreshold: 3
+      volumes:
+        - name: vectorstore-storage
+          persistentVolumeClaim:
+            claimName: vectorstore-pvc
 ---
 apiVersion: v1
 kind: Service
