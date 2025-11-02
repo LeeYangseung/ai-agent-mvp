@@ -33,3 +33,7 @@ share/python-wheels/
 
 # app data
 backend/app/data/*
+
+# k8s
+k8s/secret.yaml
+k8s/pv-data/*

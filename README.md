@@ -127,29 +127,172 @@ docker/            # Backend, Frontend container 빌드 스크립트
 ### 4) 배포
 
 #### Docker Build
-  ```
-  cd docker
-  ./docker_build.sh
-  ```
+```bash
+cd docker
+./docker_build.sh
 
-#### Kubernetes Deploy
-- 요구사항: `kubernetes` 설치, `kubectl` 연결, Ingress 컨트롤러(NGINX 등)
-- 배포 스크립트 사용
-  ```
-  cd k8s
-  ./deploy.sh                   # ConfigMap/Secret/DB/BE/FE/Ingress 전체 배포
-  ./deploy.sh --status          # 상태 확인
-  ./deploy.sh --delete          # 삭제
-  ./deploy.sh --backend-only    # 백엔드만
-  ./deploy.sh --frontend-only   # 프론트엔드만
-  ./deploy.sh -n production     # 네임스페이스 지정
-  ```
-- 포트포워딩 예시
-  ```
-  kubectl port-forward svc/ai-agent-backend-service 8000:8000 -n <NS>
-  kubectl port-forward svc/ai-agent-frontend-service 3000:3000 -n <NS>
-  kubectl port-forward svc/postgres-service 5432:5432 -n <NS>
-  ```
+# 개별 빌드도 가능
+./docker_build.sh --backend-only
+./docker_build.sh --frontend-only
+```
+
+#### Kubernetes 배포
+
+##### 사전 요구사항
+- Kubernetes 클러스터 (minikube, kind, EKS, GKE, AKS 등)
+- `kubectl` CLI 도구 설치 및 클러스터 연결
+- Docker 이미지 빌드 완료
+
+##### 로컬 개발 환경 (Minikube - 선택사항)
+
+Minikube는 로컬에서 Kubernetes를 실행하기 위한 도구입니다. 로컬 개발/테스트 환경에서 사용하며, 프로덕션 환경에서는 관리형 Kubernetes 서비스(EKS, GKE, AKS 등)를 사용하세요.
+
+```bash
+cd k8s
+
+# Minikube 시작 (자동으로 Ingress addon 활성화 및 Tunnel 실행)
+./minikube.sh start
+
+# 상태 확인
+./minikube.sh status
+
+# 중지 (데이터 보존)
+./minikube.sh stop
+
+# 완전 삭제 (데이터 삭제)
+./minikube.sh stop --delete
+```
+
+**Minikube 데이터 영속성:**
+- ✅ `minikube stop` → `minikube start`: 데이터 보존
+- ✅ Pod 재시작, Deployment 재배포: 데이터 보존
+- ❌ `minikube delete`: 모든 데이터 삭제
+
+##### 애플리케이션 배포
+
+```bash
+cd k8s
+
+# 1. Secret 설정 (최초 1회)
+# secret.example.yaml을 참고하여 secret.yaml 생성
+vim secret.yaml
+
+# 2. 전체 배포
+./deploy.sh                   # ConfigMap/Secret/DB/BE/FE/Ingress 전체 배포
+
+# 3. 상태 확인
+./deploy.sh --status          # 배포 상태 확인
+kubectl get pods              # Pod 상태 확인
+kubectl get pvc               # 스토리지 확인
+
+# 개별 배포 옵션
+./deploy.sh --backend-only    # 백엔드만
+./deploy.sh --frontend-only   # 프론트엔드만
+./deploy.sh --config-only     # ConfigMap/Secret만
+
+# 네임스페이스 지정
+./deploy.sh -n production     # 프로덕션 네임스페이스
+./deploy.sh -n development    # 개발 네임스페이스
+
+# 삭제
+./deploy.sh --delete          # 모든 리소스 삭제
+```
+
+##### 접속 방법
+
+**1) Ingress 사용 (권장 - Minikube 환경)**
+
+Minikube Tunnel이 실행되면 Ingress를 통해 접속할 수 있습니다:
+
+```bash
+# 1. /etc/hosts 파일 설정 (최초 1회)
+sudo sh -c 'echo "127.0.0.1 aiagent.local" >> /etc/hosts'
+
+# 2. Ingress 확인
+kubectl get ingress
+
+# 예시 출력:
+# NAME              CLASS   HOSTS           ADDRESS     PORTS   AGE
+# aiagent-ingress   nginx   aiagent.local   127.0.0.1   80      5m
+
+# 3. 브라우저에서 접속
+# Frontend: http://aiagent.local/
+# Backend API: http://aiagent.local/api/
+# API Docs: http://aiagent.local/api/docs
+```
+
+**참고:** 
+- Ingress에 `host: aiagent.local`이 설정되어 있어 해당 도메인으로만 접속 가능합니다
+- `localhost`로 접속하려면 `ingress.yaml`의 `host` 부분을 제거하세요
+
+**Tunnel 확인 및 시작:**
+```bash
+# Tunnel 상태 확인
+cd k8s
+./minikube.sh status
+
+# Tunnel 시작 (필요시)
+./minikube.sh tunnel
+```
+
+**2) Port Forwarding (개별 Service 테스트)**
+
+Tunnel 없이 개별 Service를 테스트할 때:
+
+```bash
+# Backend API
+kubectl port-forward svc/ai-agent-backend-service 8000:8000
+
+# Frontend
+kubectl port-forward svc/ai-agent-frontend-service 3000:3000
+
+# PostgreSQL
+kubectl port-forward svc/postgres-service 5432:5432
+
+# 접속: http://localhost:8000, http://localhost:3000
+```
+
+**3) 프로덕션 환경**
+
+관리형 Kubernetes(EKS, GKE, AKS)에서는 LoadBalancer IP 또는 도메인으로 직접 접근:
+
+```bash
+# LoadBalancer External IP 확인
+kubectl get services
+kubectl get ingress
+```
+
+##### 이미지 업데이트
+
+```bash
+# 1. 이미지 재빌드
+cd docker
+./docker_build.sh
+
+# 2. Minikube에 이미지 로드 (Minikube 사용 시)
+cd ../k8s
+minikube image load ai-agent-backend:latest
+minikube image load ai-agent-frontend:latest
+
+# 3. Deployment 재시작
+kubectl rollout restart deployment/ai-agent-backend-deployment
+kubectl rollout restart deployment/ai-agent-frontend-deployment
+```
+
+##### 프로덕션 환경 배포
+
+프로덕션 환경에서는 다음 사항을 추가로 고려하세요:
+
+- **관리형 Kubernetes**: AWS EKS, GCP GKE, Azure AKS 등 사용
+- **스토리지**: 클라우드 기반 Persistent Volume (EBS, Persistent Disk 등)
+- **Secret 관리**: AWS Secrets Manager, HashiCorp Vault 등 사용
+- **모니터링**: Prometheus, Grafana 등 연동
+- **로깅**: ELK Stack, Loki 등 중앙 집중식 로그 수집
+- **백업**: 데이터베이스 스냅샷 정책 수립
+- **보안**: NetworkPolicy, Pod Security Policy 적용
+- **스케일링**: Horizontal Pod Autoscaler (HPA) 설정
+
+자세한 내용은 `k8s/README.md`를 참고하세요.
 
 ---
 

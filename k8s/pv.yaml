@@ -1,18 +1,6 @@
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: postgres-pv
-  namespace: default
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: standard
-  hostPath:
-    path: /tmp/postgres-data  # 로컬 개발용 경로
----
+# Dynamic Provisioning을 위한 PVC
+# minikube의 기본 storageClass(standard)를 사용하여 자동으로 PV 생성
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -24,5 +12,17 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: standard
-  volumeName: postgres-pv
+  # storageClassName 미지정 시 기본 storageClass 사용 (minikube: standard)
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vectorstore-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName 미지정 시 기본 storageClass 사용 (minikube: standard)

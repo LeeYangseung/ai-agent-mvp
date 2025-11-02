@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-agent-frontend-deployment
+  name: ai-agent-frontend
 spec:
   replicas: 1
   selector:

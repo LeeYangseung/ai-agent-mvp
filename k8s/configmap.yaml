@@ -11,7 +11,7 @@ data:
   
   # Backend 설정
   LOG_LEVEL: "info"
-  VECTOR_STORE_DATA_DIR: "/app/app/data/index"
+  VECTOR_STORE_DATA_DIR: "/workspace/app/data"
   ENV: "production"
   ROOT_PATH: "/api"
   OPENAPI_URL: "/openapi.json"
