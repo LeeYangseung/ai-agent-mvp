@@ -1,6 +1,12 @@
+# ---
+# EFS 사용 시 StorageClass
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: postgres-sc
+# provisioner: efs.csi.aws.com
+# ---
 # Dynamic Provisioning을 위한 PVC
-# minikube의 기본 storageClass(standard)를 사용하여 자동으로 PV 생성
-
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -9,10 +15,35 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  # storageClassName: "postgres-sc" # EFS 사용 시 지정
+  # storageClassName 미지정 시 기본 storageClass 사용 (minikube: standard)
   resources:
     requests:
       storage: 10Gi
-  # storageClassName 미지정 시 기본 storageClass 사용 (minikube: standard)
+# ---
+# EFS 사용 시 PV 사용
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: postgres-pv
+# spec:
+#   capacity:
+#     storage: 10Gi
+#   volumeMode: Filesystem
+#   accessModes:
+#     - ReadWriteMany
+#   persistentVolumeReclaimPolicy: Retain
+#   storageClassName: postgres-sc
+#   csi:
+#     driver: efs.csi.aws.com
+#     volumeHandle: fs-0-000000000000000::fsap-00000000000000000 # EFS filesystem ID
+# ---
+# EFS 사용 시 StorageClass
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: vectorstore-sc
+# provisioner: efs.csi.aws.com
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -22,7 +53,25 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  # storageClassName: "vectorstore-sc" # EFS 사용 시 지정
+  # storageClassName 미지정 시 기본 storageClass 사용 (minikube: standard)
   resources:
     requests:
       storage: 10Gi
-  # storageClassName 미지정 시 기본 storageClass 사용 (minikube: standard)
+# ---
+# EFS 사용 시 PV 사용(Storage Class는 postgres와 공유)
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: vectorstore-pv
+# spec:
+#   capacity:
+#     storage: 10Gi
+#   volumeMode: Filesystem
+#   accessModes:
+#     - ReadWriteMany
+#   persistentVolumeReclaimPolicy: Retain
+#   storageClassName: vectorstore-sc
+#   csi:
+#     driver: efs.csi.aws.com
+#     volumeHandle: fs-0-000000000000000::fsap-00000000000000001 # EFS filesystem ID
