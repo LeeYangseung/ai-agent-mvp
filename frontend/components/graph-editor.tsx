@@ -779,7 +779,7 @@ export function GraphEditor({
         console.log('그래프 생성 성공:', response);
         alert('그래프가 성공적으로 생성되었습니다.');
         if (onBack) {
-          onBack();
+          onBack(true); // 목록 리프레시
         }
       } else if (graphId) {
         // 기존 그래프 업데이트

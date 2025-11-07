@@ -5,8 +5,8 @@ import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
-  title: 'Ai Agent',
-  description: 'Ai Agent',
+  title: 'Agent Flow',
+  description: 'Agent Flow',
   generator: 'app',
 }
 

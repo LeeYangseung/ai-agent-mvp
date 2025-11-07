@@ -137,7 +137,9 @@ async def update_chunk(
     updated_by: Optional[UUID4] = None,
 ):
     for key, value in chunk.model_dump(exclude_unset=True).items():
-        if hasattr(db_chunk, key):  # ChunkModel에 해당 필드가 있는지 확인
+        if (
+            hasattr(db_chunk, key) and value is not None
+        ):  # ChunkModel에 해당 필드가 있는지 확인
             setattr(db_chunk, key, value)
     db_chunk.updated_at = datetime.datetime.now()
     db_chunk.updated_by = updated_by if updated_by else db_chunk.updated_by

@@ -127,6 +127,7 @@ async def get_chunk(
     "",
     response_model=ResponseModel,
     status_code=http_status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 async def create_chunk(
     request: Request,
@@ -159,7 +160,11 @@ async def create_chunk(
 
 
 # 청크 수정
-@router.put("/{chunk_id}", response_model=ResponseModel)
+@router.put(
+    "/{chunk_id}",
+    response_model=ResponseModel,
+    include_in_schema=False,
+)
 async def update_chunk(
     request: Request,
     response: Response,
@@ -197,6 +202,7 @@ async def update_chunk(
     "/{chunk_id}",
     response_model=ResponseModel,
     status_code=http_status.HTTP_200_OK,
+    include_in_schema=False,
 )
 async def delete_chunk(
     request: Request,

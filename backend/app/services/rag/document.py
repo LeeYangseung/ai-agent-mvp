@@ -29,7 +29,11 @@ from typing import Optional, Tuple
 from pydantic import UUID4
 from uuid import UUID
 import shutil
-from app.utils.chunking import extract_text, chunk_text
+from app.utils.chunking import (
+    extract_text,
+    chunk_text,
+    validate_chunking_params,
+)
 from app.utils.vector_store import get_vector_store
 
 """
@@ -175,6 +179,14 @@ async def create_document(
     문서 데이터를 생성하는 서비스 함수
     """
     try:
+        # 청킹 파라미터 검증
+        validate_chunking_params(
+            method=document.method,
+            chunk_size=document.chunk_size,
+            overlap_size=document.overlap_size,
+            breakpoint_threshold_type=document.breakpoint_threshold_type,
+        )
+
         # 문서 파일 업로드
         file_path = await _upload_document(file)
         document.path = file_path
@@ -188,7 +200,11 @@ async def create_document(
         # chunking 진행
         text = extract_text(file_path)
         chunks = chunk_text(
-            text, document.chunk_size, document.overlap_size, document.method
+            text,
+            document.chunk_size,
+            document.overlap_size,
+            document.method,
+            document.breakpoint_threshold_type,
         )
 
         # Vector Store에 저장
@@ -214,6 +230,15 @@ async def create_document(
                 db,
                 chunk=chunk_create_request,
             )
+
+        # 문서 상태 업데이트
+        update_document = DocumentUpdateRequest(
+            status=DocumentStatus.indexed,
+        )
+        await document_crud.update_document(
+            db_document=db_document,
+            document=update_document,
+        )
         await db.commit()
         await db.refresh(db_document)
 
@@ -244,48 +269,11 @@ async def update_document(
         if db_document is None:
             raise NotFoundError()
 
-        # chunks 정보를 별도로 저장
-        chunks_data = getattr(document, "chunks", None)
-        # chunks를 제외한 document 객체 생성
-        document_dict = document.model_dump(
-            exclude={"chunks"}, exclude_unset=True
-        )
-        document_without_chunks = DocumentUpdateRequest(**document_dict)
-
         db_document = await document_crud.update_document(
             db_document=db_document,
-            document=document_without_chunks,
+            document=document,
         )
 
-        # chunks가 있으면 기존 chunk들 삭제 후 새로운 chunk들 생성
-        if chunks_data:
-            # 기존 chunk들 조회 및 삭제
-            existing_chunks = await chunk_crud.read_chunks(
-                db,
-                document_id=document_id,
-                limit=None,  # 모든 chunks 조회
-            )
-            if existing_chunks[1]:  # chunks가 있으면
-                for chunk in existing_chunks[1]:
-                    await chunk_crud.delete_chunk(
-                        db_chunk=chunk,
-                    )
-
-            # 새로운 chunk들 생성
-            for chunk_data in chunks_data:
-                chunk_create_request = ChunkCreateRequest(
-                    document_id=UUID(str(db_document.id)),
-                    chunk_index=chunk_data.chunk_index,
-                    content=chunk_data.content,
-                    embedding_id=chunk_data.embedding_id,
-                    chunk_size=chunk_data.chunk_size,
-                    created_by=document.updated_by,
-                    updated_by=document.updated_by,
-                )
-                _ = await chunk_crud.create_chunk(
-                    db,
-                    chunk=chunk_create_request,
-                )
         await db.commit()
         await db.refresh(db_document)
         return DocumentIdResponse(id=UUID(str(db_document.id)))

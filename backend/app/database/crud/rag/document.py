@@ -223,8 +223,8 @@ async def update_document(
 ):
     # 각 필드를 동적으로 업데이트
     for key, value in document.model_dump(exclude_unset=True).items():
-        if hasattr(
-            db_document, key
+        if (
+            hasattr(db_document, key) and value is not None
         ):  # DocumentModel에 해당 필드가 있는지 확인
             setattr(db_document, key, value)
     db_document.updated_at = datetime.datetime.now()
@@ -242,6 +242,7 @@ async def delete_document(
         return None
 
     db_document.is_deleted = True
+    db_document.status = DocumentStatus.deleted
     db_document.updated_at = datetime.datetime.now()
     db_document.updated_by = (
         updated_by if updated_by else db_document.updated_by

@@ -26,11 +26,13 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
   const [hasChanges, setHasChanges] = useState(false);
   
   // 생성 모드용 상태
-  const [chunkSize, setChunkSize] = useState("");
-  const [overlapSize, setOverlapSize] = useState("");
-  const [method, setMethod] = useState("overlap");
+  const [method, setMethod] = useState("length");
+  const [chunkSize, setChunkSize] = useState("500");
+  const [overlapSize, setOverlapSize] = useState("100");
+  const [breakpointThresholdType, setBreakpointThresholdType] = useState(""); // length는 사용 안함
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   // 문서 상세 정보 조회
   const fetchDocumentDetail = async () => {
@@ -57,6 +59,31 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
     setHasChanges(value !== document?.name);
   };
 
+  // 청킹 방법 변경 시 기본값 설정
+  const handleMethodChange = (newMethod: string) => {
+    setMethod(newMethod);
+    
+    // 각 방법에 따른 기본값 설정 및 불필요한 값 초기화
+    if (newMethod === "length") {
+      setChunkSize("500");
+      setOverlapSize("100");
+      setBreakpointThresholdType(""); // semantic 파라미터 초기화
+    } else if (newMethod === "semantic") {
+      setChunkSize(""); // length 파라미터 초기화
+      setOverlapSize(""); // length 파라미터 초기화
+      setBreakpointThresholdType("percentile");
+    } else if (newMethod === "hybrid") {
+      setChunkSize("1000");
+      setOverlapSize("100");
+      setBreakpointThresholdType("percentile");
+    } else if (newMethod === "paragraph") {
+      // paragraph는 추가 설정 불필요 - 모두 초기화
+      setChunkSize("");
+      setOverlapSize("");
+      setBreakpointThresholdType("");
+    }
+  };
+
   // 유효성 검사
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -64,12 +91,30 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
     if (!editedName.trim()) {
       newErrors.name = "문서명을 입력해주세요";
     }
-    if (!chunkSize.trim()) {
-      newErrors.chunkSize = "청킹 사이즈를 입력해주세요";
+    
+    // 청킹 방법에 따른 필수값 검증
+    if (method === "length" || method === "hybrid") {
+      if (!chunkSize.trim()) {
+        newErrors.chunkSize = "청킹 사이즈를 입력해주세요";
+      } else if (parseInt(chunkSize) <= 0) {
+        newErrors.chunkSize = "청킹 사이즈는 0보다 커야 합니다";
+      }
+      if (!overlapSize.trim()) {
+        newErrors.overlapSize = "오버랩 사이즈를 입력해주세요";
+      } else if (parseInt(overlapSize) < 0) {
+        newErrors.overlapSize = "오버랩 사이즈는 0 이상이어야 합니다";
+      }
+      if (parseInt(overlapSize) >= parseInt(chunkSize)) {
+        newErrors.overlapSize = "오버랩 사이즈는 청킹 사이즈보다 작아야 합니다";
+      }
     }
-    if (!overlapSize.trim()) {
-      newErrors.overlapSize = "오버랩 사이즈를 입력해주세요";
+    
+    if (method === "semantic" || method === "hybrid") {
+      if (!breakpointThresholdType) {
+        newErrors.breakpointThresholdType = "임계값 유형을 선택해주세요";
+      }
     }
+    
     if (!uploadedFile) {
       newErrors.file = "파일을 업로드해주세요";
     }
@@ -87,9 +132,28 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
       try {
         const formData = new FormData();
         formData.append('name', editedName);
-        formData.append('chunk_size', chunkSize);
-        formData.append('overlap_size', overlapSize);
         formData.append('method', method);
+        
+        // 청킹 방법에 따라 필요한 파라미터만 추가
+        if (method === "length") {
+          // length: chunk_size, overlap_size만 필요
+          if (chunkSize) formData.append('chunk_size', chunkSize);
+          if (overlapSize) formData.append('overlap_size', overlapSize);
+        } else if (method === "semantic") {
+          // semantic: breakpoint_threshold_type만 필요
+          if (breakpointThresholdType) {
+            formData.append('breakpoint_threshold_type', breakpointThresholdType);
+          }
+        } else if (method === "hybrid") {
+          // hybrid: 모두 필요
+          if (chunkSize) formData.append('chunk_size', chunkSize);
+          if (overlapSize) formData.append('overlap_size', overlapSize);
+          if (breakpointThresholdType) {
+            formData.append('breakpoint_threshold_type', breakpointThresholdType);
+          }
+        }
+        // paragraph: 추가 파라미터 불필요
+        
         formData.append('file', uploadedFile!);
         formData.append('created_by', 'admin');
         
@@ -227,58 +291,122 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
               )}
             </div>
 
-            {/* 청킹 사이즈 */}
-            {isCreateMode && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  청킹 사이즈
-                </label>
-                <Input
-                  value={chunkSize}
-                  onChange={(e) => setChunkSize(e.target.value)}
-                  placeholder="청킹 사이즈를 입력하세요"
-                  className={errors.chunkSize ? 'border-red-500' : ''}
-                  type="number"
-                />
-                {errors.chunkSize && (
-                  <p className="text-red-500 text-sm mt-1">{errors.chunkSize}</p>
-                )}
-              </div>
-            )}
-
-            {/* 오버랩 사이즈 */}
-            {isCreateMode && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  오버랩 사이즈
-                </label>
-                <Input
-                  value={overlapSize}
-                  onChange={(e) => setOverlapSize(e.target.value)}
-                  placeholder="오버랩 사이즈를 입력하세요"
-                  className={errors.overlapSize ? 'border-red-500' : ''}
-                  type="number"
-                />
-                {errors.overlapSize && (
-                  <p className="text-red-500 text-sm mt-1">{errors.overlapSize}</p>
-                )}
-              </div>
-            )}
-
             {/* 청킹 방법 */}
             {isCreateMode && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   청킹 방법
                 </label>
-                <Select value={method} onValueChange={setMethod}>
+                <Select value={method} onValueChange={handleMethodChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="overlap">overlap</SelectItem>
+                    <SelectItem value="length">Length (길이 기반)</SelectItem>
+                    <SelectItem value="semantic">Semantic (의미 기반)</SelectItem>
+                    <SelectItem value="hybrid">Hybrid (하이브리드)</SelectItem>
+                    <SelectItem value="paragraph">Paragraph (문단 기반)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {method === "length" && "고정된 길이로 문서를 분할합니다. \n💡 추천: 짧은 일반 텍스트"}
+                  {method === "semantic" && "의미를 기반으로 문서를 분할합니다. (임베딩 사용) \n💡 추천: 리포트, 대화 데이터"}
+                  {method === "hybrid" && "길이와 의미를 결합하여 문서를 분할합니다. \n💡 추천: 긴 보고서나 리포트"}
+                  {method === "paragraph" && "문단 구조를 기반으로 문서를 분할합니다. \n💡 추천: 위키, 기술문서, 매뉴얼, 정책문서"}
+                </p>
+              </div>
+            )}
+
+            {/* 고급 설정 토글 */}
+            {isCreateMode && method !== "paragraph" && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                  className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800"
+                >
+                  {showAdvancedSettings ? "▼" : "▶"} 고급 설정
+                </button>
+              </div>
+            )}
+
+            {/* 고급 설정 - Length/Hybrid 방법 */}
+            {isCreateMode && showAdvancedSettings && (method === "length" || method === "hybrid") && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    청킹 사이즈
+                  </label>
+                  <Input
+                    value={chunkSize}
+                    onChange={(e) => setChunkSize(e.target.value)}
+                    placeholder="청킹 사이즈를 입력하세요"
+                    className={errors.chunkSize ? 'border-red-500' : ''}
+                    type="number"
+                  />
+                  {errors.chunkSize && (
+                    <p className="text-red-500 text-sm mt-1">{errors.chunkSize}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {method === "length" && "기본값: 500 (각 청크의 최대 문자 수)"}
+                    {method === "hybrid" && "기본값: 1000 (각 청크의 최대 문자 수)"}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    오버랩 사이즈
+                  </label>
+                  <Input
+                    value={overlapSize}
+                    onChange={(e) => setOverlapSize(e.target.value)}
+                    placeholder="오버랩 사이즈를 입력하세요"
+                    className={errors.overlapSize ? 'border-red-500' : ''}
+                    type="number"
+                  />
+                  {errors.overlapSize && (
+                    <p className="text-red-500 text-sm mt-1">{errors.overlapSize}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    기본값: 100 (청크 간 중복 문자 수)
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* 고급 설정 - Semantic/Hybrid 방법 */}
+            {isCreateMode && showAdvancedSettings && (method === "semantic" || method === "hybrid") && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  임계값 유형
+                </label>
+                <Select 
+                  value={breakpointThresholdType} 
+                  onValueChange={setBreakpointThresholdType}
+                >
+                  <SelectTrigger className={errors.breakpointThresholdType ? 'border-red-500' : ''}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentile">Percentile (백분위수)</SelectItem>
+                    <SelectItem value="standard_deviation">Standard Deviation (표준편차)</SelectItem>
+                    <SelectItem value="interquartile">Interquartile (사분위수)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.breakpointThresholdType && (
+                  <p className="text-red-500 text-sm mt-1">{errors.breakpointThresholdType}</p>
+                )}
+                <div className="text-xs text-gray-500 mt-1 space-y-1">
+                  {breakpointThresholdType === "percentile" && (
+                    <p>✓ Percentile: 의미 차이의 상위 95%를 기준으로 분할. 균형잡힌 청크 생성에 적합 (기본 권장)</p>
+                  )}
+                  {breakpointThresholdType === "standard_deviation" && (
+                    <p>✓ Standard Deviation: 평균에서 3 표준편차 이상 벗어난 지점에서 분할. 명확한 주제 전환 감지에 적합</p>
+                  )}
+                  {breakpointThresholdType === "interquartile" && (
+                    <p>✓ Interquartile: 사분위수 범위를 기준으로 분할. 이상치에 강건하며 안정적인 청크 생성에 적합</p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -341,7 +469,28 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   청킹 방법
                 </label>
-                <div className="text-gray-900">{document?.method || '-'}</div>
+                <div className="text-gray-900">
+                  {document?.method === 'length' ? 'Length (길이 기반)' :
+                   document?.method === 'semantic' ? 'Semantic (의미 기반)' :
+                   document?.method === 'hybrid' ? 'Hybrid (하이브리드)' :
+                   document?.method === 'paragraph' ? 'Paragraph (문단 기반)' :
+                   document?.method || '-'}
+                </div>
+              </div>
+            )}
+
+            {/* 임계값 유형 (Semantic/Hybrid인 경우) */}
+            {!isCreateMode && (document?.method === 'semantic' || document?.method === 'hybrid') && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  임계값 유형
+                </label>
+                <div className="text-gray-900">
+                  {(document as any)?.breakpoint_threshold_type === 'percentile' ? 'Percentile (백분위수)' :
+                   (document as any)?.breakpoint_threshold_type === 'standard_deviation' ? 'Standard Deviation (표준편차)' :
+                   (document as any)?.breakpoint_threshold_type === 'interquartile' ? 'Interquartile (사분위수)' :
+                   (document as any)?.breakpoint_threshold_type || '-'}
+                </div>
               </div>
             )}
 

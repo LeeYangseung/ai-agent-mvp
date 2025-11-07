@@ -141,8 +141,8 @@ async def update_graph_history(
     updated_by: Optional[UUID4] = None,
 ):
     for key, value in graph_history.model_dump(exclude_unset=True).items():
-        if hasattr(
-            db_graph_history, key
+        if (
+            hasattr(db_graph_history, key) and value is not None
         ):  # GraphHistoryModel에 해당 필드가 있는지 확인
             setattr(db_graph_history, key, value)
     db_graph_history.updated_at = datetime.datetime.now()

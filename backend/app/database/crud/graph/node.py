@@ -136,7 +136,9 @@ async def update_node(
     updated_by: Optional[UUID4] = None,
 ):
     for key, value in node.model_dump(exclude_unset=True).items():
-        if hasattr(db_node, key):  # NodeModel에 해당 필드가 있는지 확인
+        if (
+            hasattr(db_node, key) and value is not None
+        ):  # NodeModel에 해당 필드가 있는지 확인
             setattr(db_node, key, value)
     db_node.updated_at = datetime.datetime.now()
     db_node.updated_by = updated_by if updated_by else db_node.updated_by

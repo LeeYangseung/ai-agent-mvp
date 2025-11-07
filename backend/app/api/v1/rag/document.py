@@ -131,14 +131,17 @@ async def create_document(
     response: Response,
     file: UploadFile = File(..., description="문서 파일"),
     name: str = Form(..., description="문서 이름"),
+    method: Optional[str] = Form(
+        default="length", description="청킹 전략 - 청크 방법"
+    ),
     chunk_size: Optional[int] = Form(
-        default=500, description="청킹 전략 - 청크 크기"
+        default=None, description="청킹 전략 - 청크 크기"
     ),
     overlap_size: Optional[int] = Form(
-        default=100, description="청킹 전략 - 오버랩 크기"
+        default=None, description="청킹 전략 - 오버랩 크기"
     ),
-    method: Optional[str] = Form(
-        default="overlap", description="청킹 전략 - 청크 방법"
+    breakpoint_threshold_type: Optional[str] = Form(
+        default=None, description="시맨틱 청킹 전략 - 임계값 유형"
     ),
     status: Optional[DocumentStatus] = Form(
         default=DocumentStatus.pending, description="문서 상태"
@@ -154,9 +157,10 @@ async def create_document(
         # Form 데이터로부터 DocumentCreateRequest 생성
         document = DocumentCreateRequest(
             name=name,
+            method=method,
             chunk_size=chunk_size,
             overlap_size=overlap_size,
-            method=method,
+            breakpoint_threshold_type=breakpoint_threshold_type,
             status=status,
             created_by=created_by,
             updated_by=updated_by,

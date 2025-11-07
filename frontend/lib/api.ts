@@ -54,6 +54,7 @@ export interface Document {
   chunk_size?: number;
   overlap_size?: number;
   method?: string;
+  breakpoint_threshold_type?: string;  // 시맨틱 청킹 임계값 유형
   updated_by?: string;  // 수정자 필드 추가
 }
 
