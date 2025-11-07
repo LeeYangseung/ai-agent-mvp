@@ -335,7 +335,13 @@ export function KnowledgeManagementPage() {
                     <TableCell className="font-medium">{doc.name}</TableCell>
                     <TableCell>{doc.chunk_size || '-'}</TableCell>
                     <TableCell>{doc.overlap_size || '-'}</TableCell>
-                    <TableCell>{doc.method || '-'}</TableCell>
+                    <TableCell>
+                      {doc.method === 'length' ? 'Length' :
+                       doc.method === 'semantic' ? 'Semantic' :
+                       doc.method === 'hybrid' ? 'Hybrid' :
+                       doc.method === 'paragraph' ? 'Paragraph' :
+                       doc.method || '-'}
+                    </TableCell>
                     <TableCell>
                       <Badge 
                         variant={

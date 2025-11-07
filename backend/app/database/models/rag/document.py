@@ -8,7 +8,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.database.models.base import Base, generate_uuid
-from app.schemas.enums import DocumentStatus
+from app.schemas.enums import (
+    DocumentStatus,
+    ChunkingMethod,
+    BreakpointThresholdType,
+)
 
 
 class Document(Base):
@@ -29,7 +33,18 @@ class Document(Base):
     overlap_size = Column(
         Integer, nullable=True, comment="청킹 전략 - 청크 중복 크기"
     )
-    method = Column(String, nullable=True, comment="청킹 전략 - 청크 방법")
+    method = Column(
+        Enum(ChunkingMethod),
+        default=ChunkingMethod.length,
+        nullable=True,
+        comment="청킹 전략 - 청크 방법",
+    )
+    breakpoint_threshold_type = Column(
+        Enum(BreakpointThresholdType),
+        default=BreakpointThresholdType.percentile,
+        nullable=True,
+        comment="시맨틱 청킹 전략 - 임계값 유형",
+    )
     status = Column(
         Enum(DocumentStatus),
         default=DocumentStatus.pending,

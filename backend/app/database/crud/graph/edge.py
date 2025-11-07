@@ -130,7 +130,9 @@ async def update_edge(
     updated_by: Optional[UUID4] = None,
 ):
     for key, value in edge.model_dump(exclude_unset=True).items():
-        if hasattr(db_edge, key):  # EdgeModel에 해당 필드가 있는지 확인
+        if (
+            hasattr(db_edge, key) and value is not None
+        ):  # EdgeModel에 해당 필드가 있는지 확인
             setattr(db_edge, key, value)
     db_edge.updated_at = datetime.datetime.now()
     db_edge.updated_by = updated_by if updated_by else db_edge.updated_by

@@ -3,7 +3,11 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 from uuid import uuid4
-from app.schemas.enums import DocumentStatus
+from app.schemas.enums import (
+    DocumentStatus,
+    ChunkingMethod,
+    BreakpointThresholdType,
+)
 from app.schemas.rag.chunk import (
     ChunkDetail,
     ChunkCreateRequestAtDocument,
@@ -15,7 +19,10 @@ class DocumentBase(BaseModel):
     name: str
     chunk_size: Optional[int] = None
     overlap_size: Optional[int] = None
-    method: Optional[str] = None
+    method: Optional[ChunkingMethod] = ChunkingMethod.length
+    breakpoint_threshold_type: Optional[BreakpointThresholdType] = (
+        BreakpointThresholdType.percentile
+    )
     status: Optional[DocumentStatus] = DocumentStatus.pending
 
 
@@ -33,7 +40,7 @@ class DocumentCreateRequest(DocumentBase):
                 "status": DocumentStatus.pending,
                 "chunk_size": 500,
                 "overlap_size": 100,
-                "method": "overlap",
+                "method": "length",
                 "created_by": "admin",
                 "created_at": datetime.now(),
                 "updated_by": "admin",
@@ -47,7 +54,8 @@ class DocumentUpdateRequest(DocumentBase):
     path: Optional[str] = None
     chunk_size: Optional[int] = None
     overlap_size: Optional[int] = None
-    method: Optional[str] = None
+    method: Optional[ChunkingMethod] = None
+    breakpoint_threshold_type: Optional[BreakpointThresholdType] = None
     status: Optional[DocumentStatus] = None
     updated_by: Optional[str] = "admin"
     updated_at: Optional[datetime] = datetime.now()
@@ -60,7 +68,7 @@ class DocumentUpdateRequest(DocumentBase):
                 "status": DocumentStatus.pending,
                 "chunk_size": 500,
                 "overlap_size": 100,
-                "method": "overlap",
+                "method": "length",
                 "updated_by": "admin",
                 "updated_at": datetime.now(),
             }
@@ -78,7 +86,8 @@ class DocumentDetail(BaseModel):
     path: str
     chunk_size: Optional[int] = None
     overlap_size: Optional[int] = None
-    method: Optional[str] = None
+    method: Optional[ChunkingMethod] = None
+    breakpoint_threshold_type: Optional[BreakpointThresholdType] = None
     status: DocumentStatus
     chunks: Optional[List[ChunkDetail]] = None
     created_by: Optional[str] = None
