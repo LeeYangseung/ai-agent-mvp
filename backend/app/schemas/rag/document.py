@@ -13,9 +13,11 @@ from app.schemas.rag.chunk import (
     ChunkCreateRequestAtDocument,
     ChunkUpdateRequest,
 )
+from app.schemas.rag.collection import CollectionDetail
 
 
 class DocumentBase(BaseModel):
+    collection_id: UUID
     name: str
     chunk_size: Optional[int] = None
     overlap_size: Optional[int] = None
@@ -50,6 +52,7 @@ class DocumentCreateRequest(DocumentBase):
 
 
 class DocumentUpdateRequest(DocumentBase):
+    collection_id: Optional[UUID] = None
     name: Optional[str] = None
     path: Optional[str] = None
     chunk_size: Optional[int] = None
@@ -82,6 +85,7 @@ class DocumentDeleteRequest(BaseModel):
 
 class DocumentDetail(BaseModel):
     id: UUID
+    collection: Optional[CollectionDetail] = None
     name: str
     path: str
     chunk_size: Optional[int] = None

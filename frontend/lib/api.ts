@@ -56,10 +56,16 @@ export interface Document {
   method?: string;
   breakpoint_threshold_type?: string;  // 시맨틱 청킹 임계값 유형
   updated_by?: string;  // 수정자 필드 추가
+  collection?: {
+    id: string;
+    name: string;
+    description?: string;
+  };
 }
 
 export interface DocumentFilters {
   document_id?: string;
+  collection_id?: string;
   chunk_id?: string;
   document_name?: string;
   chunk_content?: string;
@@ -211,6 +217,77 @@ export async function updateGraph(graphId: string, graph: Partial<Graph> & { nod
 export async function deleteGraph(graphId: string) {
   const base = await getApiBase();
   const res = await axios.delete(`${base}/graphs/${graphId}`, {
+    data: {
+      updated_by: "admin"
+    }
+  });
+  return res.data;
+}
+
+// 컬렉션 관리 API 함수들
+export interface Collection {
+  id: string;
+  name: string;
+  description?: string;
+  document_count?: number;
+  created_by?: string;
+  created_at?: string;
+  updated_by?: string;
+  updated_at?: string;
+}
+
+export interface CollectionFilters {
+  collection_name?: string;
+  sort?: string;
+  page?: number;
+  size?: number;
+}
+
+export async function getCollections(filters: CollectionFilters = {}) {
+  const base = await getApiBase();
+  const params = new URLSearchParams();
+  
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') {
+      params.append(key, value.toString());
+    }
+  });
+
+  const url = `${base}/collections?${params.toString()}`;
+  console.log('컬렉션 API 요청 URL:', url);
+
+  const res = await axios.get(url);
+  return res.data;
+}
+
+export async function getCollection(collectionId: string) {
+  const base = await getApiBase();
+  const res = await axios.get(`${base}/collections/${collectionId}`);
+  return res.data;
+}
+
+export async function createCollection(collection: Partial<Collection>) {
+  const base = await getApiBase();
+  const res = await axios.post(`${base}/collections`, {
+    ...collection,
+    created_by: "admin",
+    updated_by: "admin"
+  });
+  return res.data;
+}
+
+export async function updateCollection(collectionId: string, collection: Partial<Collection>) {
+  const base = await getApiBase();
+  const res = await axios.put(`${base}/collections/${collectionId}`, {
+    ...collection,
+    updated_by: "admin"
+  });
+  return res.data;
+}
+
+export async function deleteCollection(collectionId: string) {
+  const base = await getApiBase();
+  const res = await axios.delete(`${base}/collections/${collectionId}`, {
     data: {
       updated_by: "admin"
     }

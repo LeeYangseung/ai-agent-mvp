@@ -1,7 +1,8 @@
 "use client"
 
 import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getCollections, Collection } from "@/lib/api";
 
 // template에서 {변수} 추출하여 inputs 구조로 변환
 function autoExtractInputs(
@@ -39,6 +40,30 @@ export default function BaseNode({ id, data }: NodeProps) {
   
   // 임시 ID 상태 (편집 중인 ID)
   const [tempId, setTempId] = useState(data?.tempId || id);
+  
+  // 컬렉션 목록 상태 (RetrievalNode용)
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+
+  // RetrievalNode일 때 컬렉션 목록 로드
+  useEffect(() => {
+    if (data?.nodeType === "RetrievalNode") {
+      fetchCollections();
+    }
+  }, [data?.nodeType]);
+
+  const fetchCollections = async () => {
+    setCollectionsLoading(true);
+    try {
+      const response = await getCollections({ sort: "created_at:desc" });
+      const collectionData = response.data?.collections || [];
+      setCollections(collectionData);
+    } catch (error) {
+      console.error('컬렉션 조회 실패:', error);
+    } finally {
+      setCollectionsLoading(false);
+    }
+  };
 
   // 공통 데이터 업데이트
   const updateNodeData = (patch: Record<string, any>) => {
@@ -663,13 +688,32 @@ export default function BaseNode({ id, data }: NodeProps) {
             
           {/* collection */}
           <div className="mb-2">
-              <label className="text-xs font-bold mr-2">collection:</label>
-              <input
+            <label className="text-xs font-bold mr-2">collection:</label>
+            {collectionsLoading ? (
+              <div className="w-full border rounded p-1 text-xs text-gray-400">
+                로딩 중...
+              </div>
+            ) : collections.length > 0 ? (
+              <select
                 value={data?.collection || ""}
                 onChange={(e) => updateNodeData({ collection: e.target.value })}
-              placeholder="컬렉션 이름 (추후 구현)"
                 className="w-full border rounded p-1 text-xs"
-            />
+              >
+                <option value="">컬렉션 선택 (선택사항)</option>
+                {collections.map((collection) => (
+                  <option key={collection.id} value={collection.name}>
+                    {collection.name} ({collection.document_count || 0}개 문서)
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="w-full border rounded p-1 text-xs text-gray-400">
+                사용 가능한 컬렉션이 없습니다
+              </div>
+            )}
+            <div className="text-[10px] text-gray-500 mt-1">
+              특정 컬렉션에서만 검색하려면 선택하세요
+            </div>
           </div>
 
           {/* Inputs / Output 레이아웃 */}

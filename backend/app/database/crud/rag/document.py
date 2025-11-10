@@ -10,6 +10,7 @@ from app.database.models.rag.document import Document as DocumentModel
 from app.database.models.rag.chunk import (
     Chunk as ChunkModel,
 )
+from app.database.models.rag.collection import Collection as CollectionModel
 from app.schemas.rag.document import (
     DocumentCreateRequest,
     DocumentUpdateRequest,
@@ -36,6 +37,7 @@ async def create_document(
 ):
     db_document = DocumentModel(
         id=str(generate_uuid()),
+        collection_id=str(document.collection_id),
         name=document.name,
         path=document.path,
         chunk_size=document.chunk_size,
@@ -57,6 +59,8 @@ async def read_documents(
     skip: int = 0,
     limit: Optional[int] = None,
     document_id: Optional[UUID4] = None,
+    collection_id: Optional[UUID4] = None,
+    collection_name: Optional[str] = None,
     chunk_id: Optional[UUID4] = None,
     document_name: Optional[str] = None,
     chunk_content: Optional[str] = None,
@@ -68,16 +72,31 @@ async def read_documents(
     # base_query로 조건에 해당하는 id값을 찾고, 해당 id를 기반으로 Main 쿼리 실행
     # 공통 조인 조건을 적용하는 헬퍼 함수
     def apply_common_joins(query):
-        return query.outerjoin(
-            ChunkModel,
-            and_(
-                DocumentModel.id == ChunkModel.document_id,
-                or_(
-                    ChunkModel.is_deleted.is_(False),  # ON 조건에서 필터링
-                    ChunkModel.id.is_(None),
+        return (
+            query.outerjoin(
+                ChunkModel,
+                and_(
+                    DocumentModel.id == ChunkModel.document_id,
+                    or_(
+                        ChunkModel.is_deleted.is_(False),  # ON 조건에서 필터링
+                        ChunkModel.id.is_(None),
+                    ),
                 ),
-            ),
-        ).where(DocumentModel.is_deleted.is_(False))
+            )
+            .outerjoin(
+                CollectionModel,
+                and_(
+                    DocumentModel.collection_id == CollectionModel.id,
+                    or_(
+                        CollectionModel.is_deleted.is_(
+                            False
+                        ),  # ON 조건에서 필터링
+                        CollectionModel.id.is_(None),
+                    ),
+                ),
+            )
+            .where(DocumentModel.is_deleted.is_(False))
+        )
 
     # 1. 먼저 Document.id를 기준으로 서브쿼리를 생성하여 필터, 검색, 정렬 및 페이징을 적용
     base_query = select(
@@ -91,6 +110,10 @@ async def read_documents(
 
     if document_id:
         filter_conditions.append(DocumentModel.id == str(document_id))
+    if collection_id:
+        filter_conditions.append(
+            DocumentModel.collection_id == str(collection_id)
+        )
     if chunk_id:
         filter_conditions.append(ChunkModel.id == str(chunk_id))
     if status:
@@ -108,6 +131,10 @@ async def read_documents(
     if chunk_content:
         search_conditions.append(
             ChunkModel.content.ilike(f"%{chunk_content}%")
+        )
+    if collection_name:
+        search_conditions.append(
+            CollectionModel.name.ilike(f"%{collection_name}%")
         )
     if path:
         search_conditions.append(DocumentModel.path.ilike(f"%{path}%"))
@@ -151,7 +178,10 @@ async def read_documents(
     else:
         # 기본 정렬: created_at desc
         main_query = main_query.order_by(DocumentModel.created_at.desc())
-    main_query = main_query.options(contains_eager(DocumentModel.chunks))
+    main_query = main_query.options(
+        contains_eager(DocumentModel.chunks),
+        contains_eager(DocumentModel.collection),
+    )
 
     db_document = await db.execute(main_query)
     total_count = await db.scalar(total_count_query)
@@ -194,7 +224,8 @@ async def read_document(
         # 일반 조회 시에는 JOIN과 eager loading 사용
         query = (
             (
-                select(DocumentModel).outerjoin(
+                select(DocumentModel)
+                .outerjoin(
                     ChunkModel,
                     and_(
                         DocumentModel.id == ChunkModel.document_id,
@@ -206,9 +237,24 @@ async def read_document(
                         ),
                     ),
                 )
+                .outerjoin(
+                    CollectionModel,
+                    and_(
+                        DocumentModel.collection_id == CollectionModel.id,
+                        or_(
+                            CollectionModel.is_deleted.is_(
+                                False
+                            ),  # ON 조건에서 필터링
+                            CollectionModel.id.is_(None),
+                        ),
+                    ),
+                )
             )
             .where(and_(DocumentModel.id == str(document_id)))
-            .options(contains_eager(DocumentModel.chunks))
+            .options(
+                contains_eager(DocumentModel.chunks),
+                contains_eager(DocumentModel.collection),
+            )
         )
         if is_deleted is not None:
             query = query.where(DocumentModel.is_deleted.is_(is_deleted))

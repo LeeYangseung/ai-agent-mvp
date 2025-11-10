@@ -4,7 +4,8 @@ AI 에이전트(그래프 기반)와 RAG 문서 관리를 제공하는 풀스택
 
 ### 주요 기능
 - 그래프 실행: 노드/엣지로 구성된 그래프 실행 및 단계별 결과 확인
-- RAG 문서 관리: 문서 업로드/청크/색인 및 상세 조회
+- RAG 문서 관리: 컬렉션 기반 문서 업로드/청크/색인 및 상세 조회
+- 컬렉션 관리: 문서를 논리적으로 그룹화하여 검색 범위 격리 및 관리
 - 시각화 UI: 그래프 에디터, 그래프 관리, 지식 관리 화면 제공
 - 운영 도구: Docker/K8s 매니페스트와 배포 스크립트 제공
 
@@ -35,13 +36,49 @@ docker/            # Backend, Frontend container 빌드 스크립트
   - 그래프 목록/검색/정렬, 단건 상세/수정/삭제
   - 버전 및 메타 정보 확인(작성자/수정자/시간)
 - 지식 관리
-  - 문서 업로드(멀티파트), 목록/필터/페이징
+  - 컬렉션 관리: 컬렉션 생성/수정/삭제, 컬렉션별 문서 그룹화
+  - 문서 업로드(멀티파트): 컬렉션 선택 후 문서 업로드, 목록/필터/페이징
+  - 청킹 방법 선택: Length(길이 기반), Semantic(의미 기반), Hybrid(하이브리드), Paragraph(문단 기반)
   - 청크 상세: `chunk_index`, `content`, 생성/수정 시간 확인
+  - 벡터 검색: 컬렉션별 독립적인 검색 범위 제공
+
+#### 청킹 방법 사용 가이드
+문서 생성 시 문서 특성에 맞는 청킹 방법을 선택할 수 있습니다:
+
+1. **Length (길이 기반)** - 기본 권장
+   - 고정된 문자 수로 문서를 분할
+   - **사용 시점**: 짧은 일반 텍스트, 빠른 처리가 필요한 경우
+   - **설정값**: 청킹 사이즈(기본 500), 오버랩 사이즈(기본 100)
+   - **예시**: 뉴스 기사, 블로그 포스트, 짧은 보고서
+
+2. **Semantic (의미 기반)**
+   - 임베딩을 사용하여 의미적 유사도 기반으로 분할
+   - **사용 시점**: 주제별 분리가 중요한 문서, 대화 데이터
+   - **설정값**: 임계값 유형(Percentile/Standard Deviation/Interquartile)
+   - **예시**: 인터뷰 기록, 대화 로그, 리포트
+   - **주의**: 임베딩 API 호출로 인해 처리 시간이 길어질 수 있음
+
+3. **Hybrid (하이브리드)**
+   - 길이 기반 분할 후 의미 기반으로 재분할
+   - **사용 시점**: 긴 문서를 의미 있는 단위로 분할하면서 크기도 제어
+   - **설정값**: 청킹 사이즈(기본 1000), 오버랩 사이즈(기본 100), 임계값 유형
+   - **예시**: 긴 연구 논문, 기술 문서, 상세 보고서
+
+4. **Paragraph (문단 기반)**
+   - Markdown/HTML 구조 또는 문단 구분자를 기준으로 분할
+   - **사용 시점**: 구조화된 문서, 헤더가 있는 문서
+   - **설정값**: 없음 (자동 감지)
+   - **예시**: 위키 문서, 기술 매뉴얼, 정책 문서, Markdown 파일
+
+**임계값 유형 설명** (Semantic/Hybrid 사용 시):
+- **Percentile (백분위수)**: 의미 차이의 상위 95%를 기준으로 분할 - 균형잡힌 청크 생성 (기본 권장)
+- **Standard Deviation (표준편차)**: 평균에서 3 표준편차 이상 벗어난 지점에서 분할 - 명확한 주제 전환 감지
+- **Interquartile (사분위수)**: 사분위수 범위를 기준으로 분할 - 이상치에 강건하며 안정적인 청크 생성
 
 #### 노드의 역할과 I/O
 - 입력 노드(Input): 사용자 질문, 시스템 설정 등 초기 컨텍스트 생성 (output: 초기 state)
 - 프롬프트 노드(Prompt): 템플릿 기반 메시지 생성 및 LLM 호출 (input: state, output: 답변/중간 결과)
-- 리트리벌 노드(Retrieval): 벡터 스토어에서 관련 컨텍스트 검색 (input: 질의, output: 컨텍스트 목록)
+- 리트리벌 노드(Retrieval): 지정된 컬렉션의 벡터 스토어에서 관련 컨텍스트 검색 (input: 질의 + 컬렉션명, output: 컨텍스트 목록)
 - 조건 노드(Condition): 분기/루프 등 조건 처리 (input: state, output: 분기된 흐름)
 - 출력 노드(Output): 최종 응답/요약/구조화 결과 반환 (input: 최종 state)
 
@@ -49,7 +86,7 @@ docker/            # Backend, Frontend container 빌드 스크립트
 
 #### To Do: 예정 기능
 - 노드 추가: Merge Node, Web Search Node, Tool Node, MCP Node 등
-- 지식관리 강화: Chunking 방법 추가(semantic, hybrid), Reranker, HyDE 등
+- 지식관리 강화: Reranker, HyDE, Query Expansion 등
 
 ---
 
@@ -69,17 +106,104 @@ docker/            # Backend, Frontend container 빌드 스크립트
   - `POST /api/v1/graphs` — 생성 (옵션: `nodes`, `edges` 포함 가능)
   - `PUT /api/v1/graphs/{id}` — 수정 (그래프/노드/엣지 동시 갱신 가능)
   - `DELETE /api/v1/graphs/{id}` — 삭제
+- 컬렉션 관리
+  - `GET /api/v1/collections` — 목록(필터: 이름, 페이징)
+  - `GET /api/v1/collections/{id}` — 상세(문서 개수 포함)
+  - `POST /api/v1/collections` — 생성
+  - `PUT /api/v1/collections/{id}` — 수정
+  - `DELETE /api/v1/collections/{id}` — 삭제 (문서가 없을 때만 가능)
 - 문서 관리
-  - `GET /api/v1/documents` — 목록(필터: 이름/상태/페이지 등)
+  - `GET /api/v1/documents` — 목록(필터: 컬렉션ID/이름/상태/페이지 등)
   - `GET /api/v1/documents/{id}` — 상세(청크 포함)
-  - `POST /api/v1/documents` — 생성(멀티파트 또는 JSON)
+  - `POST /api/v1/documents` — 생성(멀티파트, collection_id + 청킹 방법 선택)
   - `PUT /api/v1/documents/{id}` — 수정
-  - `DELETE /api/v1/documents/{id}` — 삭제
+  - `DELETE /api/v1/documents/{id}` — 삭제 (벡터 스토어에서도 삭제)
+
+#### 청킹 방법 (Chunking Methods)
+
+문서 업로드 시 다양한 청킹 전략을 선택할 수 있으며, 각 방법은 문서 특성에 따라 최적화되어 있습니다.
+
+**1. Length-based Chunking (길이 기반)**
+- **알고리즘**: `RecursiveCharacterTextSplitter` 사용
+- **동작 방식**: 지정된 문자 수로 문서를 균등하게 분할하며, 구분자 우선순위(`\n\n` → `\n` → ` ` → `""`)에 따라 자연스러운 경계에서 분할 시도
+- **파라미터**:
+  - `chunk_size`: 각 청크의 최대 문자 수 (기본값: 500)
+  - `overlap_size`: 청크 간 중복 문자 수 (기본값: 100) - 문맥 연속성 유지
+- **장점**: 빠른 처리 속도, 예측 가능한 청크 크기, API 호출 비용 없음
+- **단점**: 문맥을 고려하지 않아 문장/단락 중간에서 분할될 수 있음
+- **추천 사용 사례**: 일반 텍스트, 뉴스 기사, 블로그 포스트, 빠른 프로토타이핑
+
+**2. Semantic Chunking (의미 기반)**
+- **알고리즘**: `SemanticChunker` + OpenAI Embeddings 사용
+- **동작 방식**: 
+  1. 문장 단위로 임베딩 생성
+  2. 인접 문장 간 의미적 유사도(코사인 거리) 계산
+  3. 임계값을 초과하는 지점(의미가 크게 변하는 지점)에서 분할
+- **파라미터**:
+  - `breakpoint_threshold_type`: 분할 임계값 결정 방식
+    - `percentile`: 거리 분포의 95 백분위수 사용 (기본 권장)
+    - `standard_deviation`: 평균 + 3×표준편차 사용
+    - `interquartile`: IQR(Inter-Quartile Range) 기반 이상치 제거
+- **장점**: 의미적으로 응집력 있는 청크 생성, 주제별 자연스러운 분리
+- **단점**: 임베딩 API 호출로 인한 비용 및 시간 증가, 청크 크기 불균등
+- **추천 사용 사례**: 인터뷰/대화 기록, 주제가 자주 바뀌는 문서, 리포트
+
+**3. Hybrid Chunking (하이브리드)**
+- **알고리즘**: Length + Semantic 2단계 처리
+- **동작 방식**:
+  1. 1단계: `RecursiveCharacterTextSplitter`로 큰 청크 생성 (기본 1000자)
+  2. 2단계: 각 청크를 `SemanticChunker`로 의미 기반 재분할
+- **파라미터**:
+  - `chunk_size`: 1단계 분할 크기 (기본값: 1000)
+  - `overlap_size`: 1단계 오버랩 크기 (기본값: 100)
+  - `breakpoint_threshold_type`: 2단계 의미 분할 임계값
+- **장점**: 청크 크기 제어 + 의미적 응집성 확보, 긴 문서 처리 효율적
+- **단점**: 가장 긴 처리 시간, API 비용 증가
+- **추천 사용 사례**: 긴 연구 논문, 기술 문서, 복잡한 보고서
+
+**4. Paragraph Chunking (문단 기반)**
+- **알고리즘**: 문서 구조 기반 파서 사용
+- **동작 방식**:
+  - Markdown: `MarkdownHeaderTextSplitter`로 헤더(`#`, `##`, `###`) 기준 분할
+  - HTML: `HTMLHeaderTextSplitter`로 태그(`<h1>`, `<h2>`, `<h3>`) 기준 분할
+  - 일반 텍스트: 문단 구분자(`\n\n`) 기준 분할
+- **파라미터**: 없음 (문서 구조 자동 감지)
+- **장점**: 문서의 원래 구조 보존, 빠른 처리, 추가 API 비용 없음
+- **단점**: 구조화되지 않은 문서에는 비효율적, 청크 크기 불균등
+- **추천 사용 사례**: 위키 문서, 기술 매뉴얼, Markdown/HTML 파일, 정책 문서
+
+**청킹 방법 선택 가이드**:
+```
+문서 특성            → 권장 방법
+─────────────────────────────────────
+짧은 일반 텍스트      → Length
+긴 문서 (빠른 처리)   → Length (큰 chunk_size)
+의미 단위 분리 필요   → Semantic
+긴 문서 (의미 보존)   → Hybrid
+구조화된 문서         → Paragraph
+대화/인터뷰          → Semantic
+기술 문서/매뉴얼      → Paragraph 또는 Hybrid
+```
+
+**임베딩 모델**: 모든 청킹 후 `text-embedding-3-small` (OpenAI) 사용하여 벡터화
 
 #### 그래프 구조 개념
 - 노드(Node): 입력/프롬프트/리트리벌/조건/출력 등 처리 단위를 정의
+  - RetrievalNode: `params.collection` 파라미터로 검색할 컬렉션 지정 가능
 - 엣지(Edge): 노드 간 데이터 플로우(방향성) 정의
 - 그래프 히스토리(Graph History): 실행 시점/입출력/결과를 기록하여 추적/디버깅에 활용
+
+#### 컬렉션 기능
+- **컬렉션이란?**: 문서를 논리적으로 그룹화하는 단위로, ChromaDB의 Collection 개념 활용
+- **사용 사례**:
+  - 프로젝트별 문서 분리 (project_a, project_b)
+  - 문서 타입별 분리 (contracts, manuals, reports)
+  - 사용자별 문서 격리 (user_123, user_456)
+- **검색 격리**: RetrievalNode에서 특정 컬렉션만 검색하여 검색 범위 제한
+- **주의사항**:
+  - 문서 생성 시 collection_id 필수
+  - 컬렉션 삭제 시 내부 문서가 있으면 삭제 불가
+  - 문서 삭제 시 벡터 스토어에서도 자동 삭제
 
 ---
 

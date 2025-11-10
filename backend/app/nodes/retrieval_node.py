@@ -18,7 +18,7 @@ class RetrievalNode(BaseNode):
         self,
         output: str,
         top_k: int = 4,
-        collection: str = "",
+        collection: str = "default",
         inputs: Dict[str, Dict[str, str]] = None,
         vector_store: Optional[Chroma] = None,
         **kwargs,
@@ -27,24 +27,28 @@ class RetrievalNode(BaseNode):
         Args:
             output: 출력을 저장할 키
             top_k: 검색할 상위 문서 개수
-            collection: 검색할 컬렉션 이름 (현재는 미사용, 추후 확장 예정)
+            collection: 검색할 컬렉션 이름
             inputs: 입력 변수들
                    예: {"query": {"type": "reference", "value": "user_input"}}
             vector_store: 벡터 스토어 인스턴스
         """
         super().__init__(output=output, **kwargs)
         self.top_k = top_k
-        self.collection = collection
+        self.collection = collection or "default"
         self.inputs = inputs or {}
-        self.vector_store = vector_store or get_vector_store()
 
-        # collection 경고 (아직 미구현)
-        if self.collection:
-            logger.warning(
-                f"RetrievalNode({self.output}): "
-                f"'collection' parameter is not yet implemented. "
-                f"Using default vector store."
+        # collection 이름으로 vector_store 초기화
+        if vector_store:
+            self.vector_store = vector_store
+        else:
+            self.vector_store = get_vector_store(
+                collection_name=self.collection
             )
+
+        logger.info(
+            f"RetrievalNode({self.output}): "
+            f"Initialized with collection='{self.collection}'"
+        )
 
     def invoke(self, state: Dict[str, Any], config=None) -> Dict[str, Any]:
         try:
@@ -83,7 +87,10 @@ class RetrievalNode(BaseNode):
             )
 
             docs = search_documents(
-                query, k=self.top_k, vector_store=self.vector_store
+                query,
+                k=self.top_k,
+                collection_name=self.collection,
+                vector_store=self.vector_store,
             )
 
             # 4. 검색 결과를 문자열 리스트로 변환
@@ -115,5 +122,8 @@ class RetrievalNode(BaseNode):
         """유사도 점수와 함께 검색"""
         k = k or self.top_k
         return search_documents_with_score(
-            query, k=k, vector_store=self.vector_store
+            query,
+            k=k,
+            collection_name=self.collection,
+            vector_store=self.vector_store,
         )

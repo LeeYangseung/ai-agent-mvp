@@ -14,6 +14,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from pydantic import UUID4
+from uuid import UUID
 from app.core.deps import get_db
 from app.core.exception import InternalServerError, CustomException
 from app.schemas.base import ResponseModel
@@ -39,6 +40,12 @@ async def get_document_list(
     page: int = Query(0, ge=0, description="페이지 번호"),
     size: int = Query(10, ge=1, le=100, description="페이지 크기"),
     document_id: Optional[UUID4] = Query(None, description="문서 ID(Filter)"),
+    collection_id: Optional[UUID4] = Query(
+        None, description="컬렉션 ID(Filter)"
+    ),
+    collection_name: Optional[str] = Query(
+        None, description="컬렉션 이름(Search)"
+    ),
     chunk_id: Optional[UUID4] = Query(None, description="청크 ID(Filter)"),
     document_name: Optional[str] = Query(
         None, description="문서 이름(Search)"
@@ -65,6 +72,8 @@ async def get_document_list(
             page=page,
             size=size,
             document_id=document_id,
+            collection_id=collection_id,
+            collection_name=collection_name,
             chunk_id=chunk_id,
             document_name=document_name,
             chunk_content=chunk_content,
@@ -130,6 +139,7 @@ async def create_document(
     request: Request,
     response: Response,
     file: UploadFile = File(..., description="문서 파일"),
+    collection_id: str = Form(..., description="컬렉션 ID"),
     name: str = Form(..., description="문서 이름"),
     method: Optional[str] = Form(
         default="length", description="청킹 전략 - 청크 방법"
@@ -156,6 +166,7 @@ async def create_document(
     try:
         # Form 데이터로부터 DocumentCreateRequest 생성
         document = DocumentCreateRequest(
+            collection_id=UUID(collection_id),
             name=name,
             method=method,
             chunk_size=chunk_size,

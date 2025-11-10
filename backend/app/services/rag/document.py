@@ -7,8 +7,10 @@ from app.core.exception import (
     InternalServerError,
     CustomException,
 )
+from app.schemas.rag.collection import CollectionDetail
 from app.database.crud.rag import document as document_crud
 from app.database.crud.rag import chunk as chunk_crud
+from app.database.crud.rag import collection as collection_crud
 from app.schemas.rag.document import (
     DocumentDetail,
     DocumentResponse,
@@ -78,6 +80,8 @@ async def get_documents(
     page: int = 0,
     size: int = 10,
     document_id: Optional[UUID4] = None,
+    collection_id: Optional[UUID4] = None,
+    collection_name: Optional[str] = None,
     chunk_id: Optional[UUID4] = None,
     document_name: Optional[str] = None,
     chunk_content: Optional[str] = None,
@@ -98,6 +102,8 @@ async def get_documents(
             skip=skip,
             limit=limit,
             document_id=document_id,
+            collection_id=collection_id,
+            collection_name=collection_name,
             chunk_id=chunk_id,
             document_name=document_name,
             chunk_content=chunk_content,
@@ -121,10 +127,16 @@ async def get_documents(
                 convert_sqlalchemy_to_pydantic(chunk, ChunkDetail)
                 for chunk in getattr(document, "chunks", [])
             ]
+            # collection 변환
+            collection = convert_sqlalchemy_to_pydantic(
+                getattr(document, "collection", None), CollectionDetail
+            )
 
             # document 변환 (chunks 포함)
             document_dict = convert_sqlalchemy_to_pydantic(
-                document, DocumentDetail, additional_fields={"chunks": chunks}
+                document,
+                DocumentDetail,
+                additional_fields={"chunks": chunks, "collection": collection},
             )
             documents.append(document_dict)
 
@@ -157,10 +169,16 @@ async def get_document(
             convert_sqlalchemy_to_pydantic(chunk, ChunkDetail)
             for chunk in getattr(db_document, "chunks", [])
         ]
+        # collection 변환
+        collection = convert_sqlalchemy_to_pydantic(
+            getattr(db_document, "collection", None), CollectionDetail
+        )
 
         # document 변환 (chunks 포함)
         document_dict = convert_sqlalchemy_to_pydantic(
-            db_document, DocumentDetail, additional_fields={"chunks": chunks}
+            db_document,
+            DocumentDetail,
+            additional_fields={"chunks": chunks, "collection": collection},
         )
 
         return DocumentResponse(document=document_dict)
@@ -179,6 +197,18 @@ async def create_document(
     문서 데이터를 생성하는 서비스 함수
     """
     try:
+        # 컬렉션 존재 여부 확인
+        collection_result = await collection_crud.read_collection(
+            db,
+            collection_id=document.collection_id,
+            is_deleted=False,
+        )
+        if collection_result is None:
+            raise NotFoundError(
+                message="컬렉션을 찾을 수 없습니다.",
+                data={"collection_id": str(document.collection_id)},
+            )
+
         # 청킹 파라미터 검증
         validate_chunking_params(
             method=document.method,
@@ -207,8 +237,9 @@ async def create_document(
             document.breakpoint_threshold_type,
         )
 
-        # Vector Store에 저장
-        vector_store = get_vector_store()
+        # Vector Store에 저장 (collection 이름 사용)
+        collection_model = collection_result[0]
+        vector_store = get_vector_store(collection_name=collection_model.name)
         metadatas = [
             {"document_id": str(db_document.id), "chunk_index": idx}
             for idx, _ in enumerate(chunks)
@@ -292,6 +323,7 @@ async def delete_document(
 ) -> DocumentIdResponse:
     """
     문서 데이터를 삭제하는 서비스 함수
+    Vector Store에서도 해당 문서의 chunks 삭제
     """
     try:
         db_document = await document_crud.read_document(
@@ -302,17 +334,39 @@ async def delete_document(
         )
         if db_document is None:
             raise NotFoundError()
-        # Chunks 삭제
-        existing_chunks = await chunk_crud.read_chunks(
+
+        # 컬렉션 정보 조회
+        collection_result = await collection_crud.read_collection(
             db,
-            document_id=document_id,
-            limit=None,  # 모든 chunks 조회
+            collection_id=UUID(str(db_document.collection_id)),
+            is_deleted=False,
         )
-        if existing_chunks[1]:  # chunks가 있으면
-            for chunk in existing_chunks[1]:
-                await chunk_crud.delete_chunk(
-                    db_chunk=chunk,
-                )
+        if collection_result:
+            collection_model = collection_result[0]
+            vector_store = get_vector_store(
+                collection_name=collection_model.name
+            )
+
+            # Chunks 조회 및 삭제
+            existing_chunks = await chunk_crud.read_chunks(
+                db,
+                document_id=document_id,
+                limit=None,  # 모든 chunks 조회
+            )
+            if existing_chunks[1]:  # chunks가 있으면
+                # Vector Store에서 삭제
+                embedding_ids = [
+                    chunk.embedding_id for chunk in existing_chunks[1]
+                ]
+                if embedding_ids:
+                    vector_store.delete(ids=embedding_ids)
+
+                # RDB에서 삭제
+                for chunk in existing_chunks[1]:
+                    await chunk_crud.delete_chunk(
+                        db_chunk=chunk,
+                    )
+
         db_document = await document_crud.delete_document(
             db_document=db_document,
             updated_by=document.updated_by,
@@ -333,7 +387,8 @@ async def delete_document_hard(
     document_id: UUID4,
 ) -> DocumentIdResponse:
     """
-    문서 데이터를 삭제하는 서비스 함수
+    문서 데이터를 Hard Delete하는 서비스 함수
+    Vector Store에서도 해당 문서의 chunks 삭제
     """
     try:
         db_document = await document_crud.read_document(
@@ -343,25 +398,46 @@ async def delete_document_hard(
         )
         if db_document is None:
             raise NotFoundError()
-        # Chunks 삭제
-        existing_chunks = await chunk_crud.read_chunks(
+
+        # 컬렉션 정보 조회
+        collection_result = await collection_crud.read_collection(
             db,
-            document_id=document_id,
-            limit=None,  # 모든 chunks 조회
+            collection_id=UUID(str(db_document.collection_id)),
         )
-        if existing_chunks[1]:  # chunks가 있으면
-            for chunk in existing_chunks[1]:
-                _ = await chunk_crud.delete_chunk_hard(
-                    db_chunk=chunk,
-                    db=db,
-                )
-        db_document = await document_crud.delete_document_hard(
+        if collection_result:
+            collection_model = collection_result[0]
+            vector_store = get_vector_store(
+                collection_name=collection_model.name
+            )
+
+            # Chunks 조회 및 삭제
+            existing_chunks = await chunk_crud.read_chunks(
+                db,
+                document_id=document_id,
+                limit=None,  # 모든 chunks 조회
+            )
+            if existing_chunks[1]:  # chunks가 있으면
+                # Vector Store에서 삭제
+                embedding_ids = [
+                    chunk.embedding_id for chunk in existing_chunks[1]
+                ]
+                if embedding_ids:
+                    vector_store.delete(ids=embedding_ids)
+
+                # RDB에서 Hard Delete
+                for chunk in existing_chunks[1]:
+                    _ = await chunk_crud.delete_chunk_hard(
+                        db_chunk=chunk,
+                        db=db,
+                    )
+
+        document_id_to_return = UUID(str(db_document.id))
+        await document_crud.delete_document_hard(
             db_document=db_document,
             db=db,
         )
         await db.commit()
-        await db.refresh(db_document)
-        return DocumentIdResponse(id=UUID(str(db_document.id)))
+        return DocumentIdResponse(id=document_id_to_return)
     except CustomException:
         await db.rollback()
         raise
