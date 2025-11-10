@@ -4,6 +4,7 @@ from sqlalchemy import (
     String,
     Enum,
     Integer,
+    ForeignKey,
 )
 from sqlalchemy.orm import relationship
 
@@ -24,6 +25,13 @@ class Document(Base):
         nullable=False,
         primary_key=True,
         index=True,
+    )
+    collection_id = Column(
+        CHAR(36),
+        ForeignKey("collection.id"),
+        nullable=False,
+        index=True,
+        comment="컬렉션 아이디",
     )
     name = Column(String, nullable=False, comment="문서 이름")
     path = Column(String, nullable=False, comment="문서 경로")
@@ -51,6 +59,7 @@ class Document(Base):
         comment="문서 상태",
     )
 
+    collection = relationship("Collection", back_populates="documents")
     chunks = relationship(
         "Chunk", back_populates="document", cascade="all, delete-orphan"
     )

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ChevronUp, ChevronDown, Search, RotateCcw, Trash2, Plus } from "lucide-react";
-import { getDocuments, Document, DocumentFilters, deleteDocument, createDocument } from "@/lib/api";
+import { getDocuments, Document, DocumentFilters, deleteDocument, createDocument, getCollections, Collection } from "@/lib/api";
 import { DocumentDetailPage } from "./document-detail-page";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
@@ -25,6 +25,7 @@ const FIELD_MAPPING: Record<SortField, string> = {
 
 export function KnowledgeManagementPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<DocumentFilters>({
     page: 1,
@@ -36,6 +37,16 @@ export function KnowledgeManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [isCreateMode, setIsCreateMode] = useState(false);
+
+  // 컬렉션 목록 조회
+  const fetchCollections = async () => {
+    try {
+      const response = await getCollections({ sort: "created_at:desc" });
+      setCollections(response.data?.collections || []);
+    } catch (error) {
+      console.error('컬렉션 조회 실패:', error);
+    }
+  };
 
   // 정렬 처리
   const handleSort = (field: SortField) => {
@@ -114,6 +125,10 @@ export function KnowledgeManagementPage() {
   const endItem = Math.min(currentPage * 10, totalCount);
 
   useEffect(() => {
+    fetchCollections();
+  }, []);
+
+  useEffect(() => {
     fetchDocuments();
   }, [currentPage, sortField, sortDirection]);
 
@@ -177,6 +192,33 @@ export function KnowledgeManagementPage() {
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">컬렉션</label>
+            <Select
+              value={filters.collection_id || 'all'}
+              onValueChange={(value) => setFilters({ ...filters, collection_id: value === 'all' ? undefined : value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="전체" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                {collections.map((collection) => (
+                  <SelectItem key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">문서명</label>
+            <Input
+              placeholder="문서명 입력"
+              value={filters.document_name || ''}
+              onChange={(e) => setFilters({ ...filters, document_name: e.target.value })}
+            />
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">문서 ID</label>
             <Input
               placeholder="문서 ID 입력"
@@ -192,14 +234,9 @@ export function KnowledgeManagementPage() {
               onChange={(e) => setFilters({ ...filters, chunk_id: e.target.value })}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">문서명</label>
-            <Input
-              placeholder="문서명 입력"
-              value={filters.document_name || ''}
-              onChange={(e) => setFilters({ ...filters, document_name: e.target.value })}
-            />
-          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">청킹 내용</label>
             <Input
@@ -208,9 +245,6 @@ export function KnowledgeManagementPage() {
               onChange={(e) => setFilters({ ...filters, chunk_content: e.target.value })}
             />
           </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">경로</label>
             <Input
@@ -264,6 +298,7 @@ export function KnowledgeManagementPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>컬렉션</TableHead>
                 <TableHead 
                   className="cursor-pointer hover:bg-gray-50"
                   onClick={() => handleSort('document_name')}
@@ -315,13 +350,13 @@ export function KnowledgeManagementPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     로딩 중...
                   </TableCell>
                 </TableRow>
               ) : documents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     조회된 문서가 없습니다.
                   </TableCell>
                 </TableRow>
@@ -332,6 +367,15 @@ export function KnowledgeManagementPage() {
                     className="cursor-pointer hover:bg-gray-50"
                     onDoubleClick={() => handleDocumentClick(doc.id)}
                   >
+                    <TableCell>
+                      {doc.collection ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          {doc.collection.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">{doc.name}</TableCell>
                     <TableCell>{doc.chunk_size || '-'}</TableCell>
                     <TableCell>{doc.overlap_size || '-'}</TableCell>

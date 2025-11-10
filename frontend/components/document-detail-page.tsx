@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save, X, Upload } from "lucide-react";
+import { ArrowLeft, Save, X, Upload, Search } from "lucide-react";
 import { getDocumentDetail, updateDocument, createDocument, DocumentDetail, Chunk } from "@/lib/api";
 import { useToast } from "../hooks/use-toast";
+import { CollectionManagerDialog } from "./collection-manager-dialog";
 
 interface DocumentDetailPageProps {
   documentId: string;
@@ -26,6 +27,8 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
   const [hasChanges, setHasChanges] = useState(false);
   
   // 생성 모드용 상태
+  const [collectionId, setCollectionId] = useState("");
+  const [collectionName, setCollectionName] = useState("");
   const [method, setMethod] = useState("length");
   const [chunkSize, setChunkSize] = useState("500");
   const [overlapSize, setOverlapSize] = useState("100");
@@ -33,6 +36,7 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [isCollectionDialogOpen, setIsCollectionDialogOpen] = useState(false);
 
   // 문서 상세 정보 조회
   const fetchDocumentDetail = async () => {
@@ -92,6 +96,10 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
       newErrors.name = "문서명을 입력해주세요";
     }
     
+    if (!collectionId.trim()) {
+      newErrors.collection = "컬렉션을 선택해주세요";
+    }
+    
     // 청킹 방법에 따른 필수값 검증
     if (method === "length" || method === "hybrid") {
       if (!chunkSize.trim()) {
@@ -131,6 +139,7 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
       setSaving(true);
       try {
         const formData = new FormData();
+        formData.append('collection_id', collectionId); // 컬렉션 ID 추가
         formData.append('name', editedName);
         formData.append('method', method);
         
@@ -270,6 +279,36 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
             <CardTitle>문서 정보</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* 컬렉션 선택 */}
+            {isCreateMode && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  컬렉션 *
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={collectionName}
+                    readOnly
+                    placeholder="컬렉션을 선택하세요"
+                    className={errors.collection ? 'border-red-500' : ''}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCollectionDialogOpen(true)}
+                  >
+                    <Search className="h-4 w-4" />
+                  </Button>
+                </div>
+                {errors.collection && (
+                  <p className="text-red-500 text-sm mt-1">{errors.collection}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  돋보기 버튼을 클릭하여 컬렉션을 선택하거나 새로 생성하세요.
+                </p>
+              </div>
+            )}
+
             {/* 문서명 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -610,6 +649,17 @@ export function DocumentDetailPage({ documentId, onBack, isCreateMode = false }:
           {saving ? '저장 중...' : isCreateMode ? '생성' : '저장'}
         </Button>
       </div>
+
+      {/* 컬렉션 관리 팝업 */}
+      <CollectionManagerDialog
+        isOpen={isCollectionDialogOpen}
+        onClose={() => setIsCollectionDialogOpen(false)}
+        onSelect={(id: string, name: string) => {
+          setCollectionId(id);
+          setCollectionName(name);
+          setErrors({ ...errors, collection: "" });
+        }}
+      />
     </div>
   );
 }
