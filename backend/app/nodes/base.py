@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Any, Dict, Optional
 from langchain_openai import ChatOpenAI
-from langchain.schema.runnable import Runnable
+from langchain_core.runnables import Runnable
 import logging
 
 logger = logging.getLogger(__name__)
