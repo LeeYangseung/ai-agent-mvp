@@ -121,6 +121,8 @@ export default function BaseNode({ id, data }: NodeProps) {
         return "p-3 rounded-lg shadow-md bg-purple-50 border border-purple-200 w-[380px]";
       case "ConditionNode":
         return "p-3 rounded-lg shadow-md bg-yellow-50 border border-yellow-200 w-[480px]";
+      case "MergeNode":
+        return "p-3 rounded-lg shadow-md bg-orange-50 border border-orange-200 w-[380px]";
       case "PromptNode":
       default:
         return "p-3 rounded-lg shadow-md bg-white border border-gray-200 w-[480px]";
@@ -138,6 +140,7 @@ export default function BaseNode({ id, data }: NodeProps) {
           {data?.nodeType === "RetrievalNode" && "🔍 Retrieval Node"}
           {data?.nodeType === "OutputNode" && "📤 Output Node"}
           {data?.nodeType === "ConditionNode" && "🔀 Condition Node"}
+          {data?.nodeType === "MergeNode" && "🔗 Merge Node"}
         </div>
         
         {/* 오른쪽 버튼들 */}
@@ -207,11 +210,33 @@ export default function BaseNode({ id, data }: NodeProps) {
                   <div className="font-bold mb-1">🔀 Condition Node</div>
                   <div>조건에 따라 다른 노드로 분기합니다.</div>
                   <div className="mt-1 text-gray-300">
+                    <div>• evaluation_mode: 평가 모드</div>
+                    <div className="text-gray-400 text-[10px] ml-3">
+                      - first_match: 첫 번째 조건만<br/>
+                      - all_matches: 병렬 fan-out
+                    </div>
                     <div>• inputs: 조건 평가에 사용할 변수들</div>
                     <div>• conditions: IF/ELSE IF/ELSE 조건 목록</div>
                     <div className="text-gray-400 text-[10px] mt-1">
                       각 조건마다 연결선으로 다음 노드 지정
                     </div>
+                  </div>
+                </div>
+              )}
+              {data?.nodeType === "MergeNode" && (
+                <div>
+                  <div className="font-bold mb-1">🔗 Merge Node</div>
+                  <div>여러 병렬 브랜치의 결과를 하나로 병합합니다.</div>
+                  <div className="mt-1 text-gray-300">
+                    <div>• inputs: 병합할 여러 입력들</div>
+                    <div>• merge_strategy: 병합 전략</div>
+                    <div className="text-gray-400 text-[10px] ml-3">
+                      - concat: 문자열 연결<br/>
+                      - list: 리스트로 수집<br/>
+                      - dict: 딕셔너리로 수집
+                    </div>
+                    <div>• separator: concat 모드 구분자</div>
+                    <div>• output: 병합된 결과를 저장할 키</div>
                   </div>
                 </div>
               )}
@@ -370,16 +395,18 @@ export default function BaseNode({ id, data }: NodeProps) {
                       .map((n) => {
                         // InputNode는 user_input을 출력
                         if (n.data?.nodeType === "InputNode") {
-                          return { id: n.id, output: "user_input" };
+                          return { id: n.id, output: "user_input", fullKey: `${n.id}_user_input` };
                         }
                         // OutputNode는 agent_output을 출력
                         if (n.data?.nodeType === "OutputNode") {
-                          return { id: n.id, output: "agent_output" };
+                          return { id: n.id, output: "agent_output", fullKey: `${n.id}_agent_output` };
                         }
                         // 기타 노드는 data.output 사용
+                        const output = n.data?.output || "output";
                         return { 
                           id: n.id, 
-                          output: n.data?.output  || "output" 
+                          output: output,
+                          fullKey: `${n.id}_${output}`
                         };
                       });
 
@@ -437,7 +464,7 @@ export default function BaseNode({ id, data }: NodeProps) {
                           >
                             <option value="">선택하세요</option>
                             {availableOutputs.map((opt) => (
-                              <option key={opt.id} value={opt.output}>
+                              <option key={opt.id} value={opt.fullKey}>
                                 {opt.id}.{opt.output}
                               </option>
                             ))}
@@ -557,16 +584,18 @@ export default function BaseNode({ id, data }: NodeProps) {
                       .map((n) => {
                         // InputNode는 user_input을 출력
                         if (n.data?.nodeType === "InputNode") {
-                          return { id: n.id, output: "user_input" };
+                          return { id: n.id, output: "user_input", fullKey: `${n.id}_user_input` };
                         }
                         // OutputNode는 agent_output을 출력
                         if (n.data?.nodeType === "OutputNode") {
-                          return { id: n.id, output: "agent_output" };
+                          return { id: n.id, output: "agent_output", fullKey: `${n.id}_agent_output` };
                         }
                         // 기타 노드는 data.output 사용
+                        const output = n.data?.output || "output";
                         return { 
                           id: n.id, 
-                          output: n.data?.output || "output" 
+                          output: output,
+                          fullKey: `${n.id}_${output}`
                         };
                       });
 
@@ -624,7 +653,7 @@ export default function BaseNode({ id, data }: NodeProps) {
                           >
                             <option value="">선택하세요</option>
                             {availableOutputs.map((opt) => (
-                              <option key={opt.id} value={opt.output}>
+                              <option key={opt.id} value={opt.fullKey}>
                                 {opt.id}.{opt.output}
                               </option>
                             ))}
@@ -745,16 +774,18 @@ export default function BaseNode({ id, data }: NodeProps) {
                       .map((n) => {
                         // InputNode는 user_input을 출력
                         if (n.data?.nodeType === "InputNode") {
-                          return { id: n.id, output: "user_input" };
+                          return { id: n.id, output: "user_input", fullKey: `${n.id}_user_input` };
                         }
                         // OutputNode는 agent_output을 출력
                         if (n.data?.nodeType === "OutputNode") {
-                          return { id: n.id, output: "agent_output" };
+                          return { id: n.id, output: "agent_output", fullKey: `${n.id}_agent_output` };
                         }
                         // 기타 노드는 data.output 사용
+                        const output = n.data?.output || "output";
                         return { 
                           id: n.id, 
-                          output: n.data?.output || "output" 
+                          output: output,
+                          fullKey: `${n.id}_${output}`
                         };
                       });
 
@@ -812,7 +843,7 @@ export default function BaseNode({ id, data }: NodeProps) {
                           >
                             <option value="">선택하세요</option>
                             {availableOutputs.map((opt) => (
-                              <option key={opt.id} value={opt.output}>
+                              <option key={opt.id} value={opt.fullKey}>
                                 {opt.id}.{opt.output}
                               </option>
                             ))}
@@ -863,6 +894,25 @@ export default function BaseNode({ id, data }: NodeProps) {
       {/* ConditionNode UI */}
       {data?.nodeType === "ConditionNode" && (
         <>
+            {/* Evaluation Mode 섹션 */}
+            <div className="mb-3">
+              <label className="text-xs font-bold mr-2">Evaluation Mode:</label>
+              <select
+                value={data?.evaluation_mode || "first_match"}
+                onChange={(e) => updateNodeData({ evaluation_mode: e.target.value })}
+                className="w-full border rounded px-2 py-1 text-xs"
+              >
+                <option value="first_match">First Match (첫 번째 조건만)</option>
+                <option value="all_matches">All Matches (병렬 Fan-out)</option>
+              </select>
+              <div className="mt-1 text-[10px] text-gray-500">
+                {data?.evaluation_mode === "all_matches" 
+                  ? "⚡ 만족하는 모든 조건의 노드를 병렬로 실행합니다"
+                  : "🎯 첫 번째로 만족하는 조건의 노드만 실행합니다"
+                }
+              </div>
+            </div>
+
             {/* Conditions 섹션 */}
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -1012,16 +1062,18 @@ export default function BaseNode({ id, data }: NodeProps) {
                         .map((n) => {
                           // InputNode는 user_input을 출력
                           if (n.data?.nodeType === "InputNode") {
-                            return { id: n.id, output: "user_input" };
+                            return { id: n.id, output: "user_input", fullKey: `${n.id}_user_input` };
                           }
                           // OutputNode는 agent_output을 출력
                           if (n.data?.nodeType === "OutputNode") {
-                            return { id: n.id, output: "agent_output" };
+                            return { id: n.id, output: "agent_output", fullKey: `${n.id}_agent_output` };
                           }
                           // 기타 노드는 data.output 사용
+                          const output = n.data?.output || "output";
                           return { 
                             id: n.id, 
-                            output: n.data?.output || "output" 
+                            output: output,
+                            fullKey: `${n.id}_${output}`
                           };
                         });
 
@@ -1076,7 +1128,7 @@ export default function BaseNode({ id, data }: NodeProps) {
                             >
                               <option value="">선택하세요</option>
                               {availableOutputs.map((opt) => (
-                                <option key={opt.id} value={opt.output}>
+                                <option key={opt.id} value={opt.fullKey}>
                                   {opt.id}.{opt.output}
                                 </option>
                               ))}
@@ -1108,6 +1160,175 @@ export default function BaseNode({ id, data }: NodeProps) {
         </>
       )}
 
+      {/* MergeNode UI */}
+      {data?.nodeType === "MergeNode" && (
+        <>
+          {/* Merge Strategy */}
+          <div className="mb-2">
+            <label className="text-xs font-bold mr-2">Merge Strategy:</label>
+            <select
+              value={data?.merge_strategy || "concat"}
+              onChange={(e) => updateNodeData({ merge_strategy: e.target.value })}
+              className="w-full border rounded px-2 py-1 text-xs"
+            >
+              <option value="concat">문자열 연결 (concat)</option>
+              <option value="list">리스트 수집 (list)</option>
+              <option value="dict">딕셔너리 수집 (dict)</option>
+            </select>
+          </div>
+
+          {/* Separator (concat 모드일 때만) */}
+          {data?.merge_strategy === "concat" && (
+            <div className="mb-2">
+              <label className="text-xs font-bold mr-2">Separator:</label>
+              <input
+                value={data?.separator || "\n\n---\n\n"}
+                onChange={(e) => updateNodeData({ separator: e.target.value })}
+                placeholder="\n\n---\n\n"
+                className="w-full border rounded p-1 text-xs font-mono"
+              />
+            </div>
+          )}
+
+          {/* Inputs / Output 레이아웃 */}
+          <div className="mt-3 pt-3 border-t space-y-2">
+            {/* Inputs */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold">Inputs (병합할 결과들):</label>
+                <button
+                  onClick={() => {
+                    const newKey = `result_${Object.keys(data?.inputs || {}).length + 1}`;
+                    const newInputs = { 
+                      ...(data?.inputs || {}), 
+                      [newKey]: { type: "reference", value: "" } 
+                    };
+                    updateNodeData({ inputs: newInputs });
+                  }}
+                  className="text-[10px] px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded"
+                  title="입력 추가"
+                >
+                  + 추가
+                </button>
+              </div>
+              <div className="space-y-1">
+                {data?.inputs &&
+                  Object.entries(data.inputs).map(([key, config]: [string, any], index: number) => {
+                    const availableOutputs = getNodes()
+                      .filter((n) => n.id !== id)
+                      .map((n) => {
+                        if (n.data?.nodeType === "InputNode") {
+                          return { id: n.id, output: "user_input", fullKey: `${n.id}_user_input` };
+                        }
+                        if (n.data?.nodeType === "OutputNode") {
+                          return { id: n.id, output: "agent_output", fullKey: `${n.id}_agent_output` };
+                        }
+                        const output = n.data?.output || "output";
+                        return { 
+                          id: n.id, 
+                          output: output,
+                          fullKey: `${n.id}_${output}`
+                        };
+                      });
+
+                    return (
+                      <div key={index} className="flex items-center gap-1">
+                        <input
+                          value={key}
+                          onChange={(e) => {
+                            const newInputs = { ...data.inputs };
+                            const value = newInputs[key];
+                            delete newInputs[key];
+                            newInputs[e.target.value] = value;
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-20 border rounded px-1 text-[10px] font-mono bg-gray-50"
+                          placeholder="변수명"
+                        />
+                        
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            const newType = config.type === "fixed" ? "reference" : "fixed";
+                            newInputs[key] = { ...config, type: newType, value: "" };
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 border rounded text-[9px] font-bold bg-white hover:bg-gray-100"
+                          title={config.type === "fixed" ? "고정값 → 참조" : "참조 → 고정값"}
+                        >
+                          {config.type === "fixed" ? "T" : "→"}
+                        </button>
+
+                        {config.type === "fixed" ? (
+                          <input
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            placeholder="고정값"
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          />
+                        ) : (
+                          <select
+                            value={config.value || ""}
+                            onChange={(e) => {
+                              const newInputs = { ...data.inputs };
+                              newInputs[key] = { ...config, value: e.target.value };
+                              updateNodeData({ inputs: newInputs });
+                            }}
+                            className="flex-1 border rounded px-1 text-[10px]"
+                          >
+                            <option value="">선택하세요</option>
+                            {availableOutputs.map((opt) => (
+                              <option key={opt.id} value={opt.fullKey}>
+                                {opt.id}.{opt.output}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            const newInputs = { ...data.inputs };
+                            delete newInputs[key];
+                            updateNodeData({ inputs: newInputs });
+                          }}
+                          className="w-5 h-5 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center text-xs"
+                          title="삭제"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                {(!data?.inputs || Object.keys(data.inputs).length === 0) && (
+                  <div className="text-[10px] text-gray-400 italic">
+                    + 추가 버튼으로 병합할 입력들을 추가하세요
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Output */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold w-16">Output:</label>
+              <input
+                value={data?.output || ""}
+                onChange={(e) =>
+                  updateNodeData({
+                    output: e.target.value,
+                  })
+                }
+                placeholder="merged_output"
+                className="flex-1 border rounded px-1 text-xs"
+              />
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Input Handle (모든 노드 공통) */}
       <Handle 
         type="target" 
@@ -1130,8 +1351,8 @@ export default function BaseNode({ id, data }: NodeProps) {
           {/* 각 조건마다 별도의 source handle */}
           {data?.conditions && data.conditions.map((cond: any, index: number) => {
             // 각 조건 블록의 중간 지점에 위치하도록 계산
-            // 헤더(80px) + 조건들 위쪽 여백(8px) + 각 조건 블록 높이(85px) * index + 조건 블록 높이의 절반(42.5px)
-            const topPosition = 80 + 8 + (index * 85) + 42.5;
+            // 헤더(160px) + 조건들 위쪽 여백(8px) + 각 조건 블록 높이(85px) * index + 조건 블록 높이의 절반(42.5px)
+            const topPosition = 160 + 8 + (index * 85) + 42.5;
             
             return (
               <Handle

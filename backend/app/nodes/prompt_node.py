@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional
 from langchain_openai import ChatOpenAI
 from .base import BaseNode
-from langchain.schema.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 import logging
 
 logger = logging.getLogger(__name__)

@@ -527,6 +527,7 @@ function NodeSidebar({
   onAddInputNode,
   onAddOutputNode,
   onAddConditionNode,
+  onAddMergeNode,
   onLoadSnippet 
 }: { 
   onAddNode: () => void;
@@ -534,6 +535,7 @@ function NodeSidebar({
   onAddInputNode: () => void;
   onAddOutputNode: () => void;
   onAddConditionNode: () => void;
+  onAddMergeNode: () => void;
   onLoadSnippet: (snippet: GraphSnippet) => void;
 }) {
   return (
@@ -562,6 +564,12 @@ function NodeSidebar({
         onClick={onAddConditionNode}
       >
         🔀 Add Condition Node
+      </Button>
+      <Button
+        className="w-full mb-2"
+        onClick={onAddMergeNode}
+      >
+        🔗 Add Merge Node
       </Button>
       <Button
         className="w-full mb-2"
@@ -754,6 +762,11 @@ export function GraphEditor({
                   inputs: n.data.inputs || {},
                   conditions: n.data.conditions || [],
                   default_target: n.data.default_target || "",
+                  evaluation_mode: n.data.evaluation_mode || "first_match",
+                } : n.data.nodeType === "MergeNode" ? {
+                  inputs: n.data.inputs || {},
+                  merge_strategy: n.data.merge_strategy || "concat",
+                  separator: n.data.separator || "\n\n---\n\n",
                 } : {})
           }
         })),
@@ -1019,6 +1032,7 @@ export function GraphEditor({
       position: { x: 100 + nodes.length * 350, y: 200 },
       data: {
         nodeType: "ConditionNode",
+        evaluation_mode: "first_match",
         inputs: {
           answer: { type: "reference", value: "" }
         },
@@ -1037,17 +1051,125 @@ export function GraphEditor({
     setNodes((nds) => [...nds, newNode]);
   };
 
+  const onAddMergeNode = () => {
+    const newNode: Node = {
+      id: `node-${nodes.length + 1}`,
+      type: "BaseNode",
+      position: { x: 100 + nodes.length * 350, y: 200 },
+      data: {
+        nodeType: "MergeNode",
+        merge_strategy: "concat",
+        separator: "\n\n---\n\n",
+        inputs: {
+          result_1: { type: "reference", value: "" },
+          result_2: { type: "reference", value: "" }
+        },
+        output: "merged_output",
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  };
+
   // 스니펫 로드 함수
   const onLoadSnippet = (snippet: GraphSnippet) => {
     // 기존 노드와 엣지 초기화
     setNodes([]);
     setEdges([]);
 
+    // 자동 레이아웃을 위한 노드 위치 계산
+    const calculateNodePositions = () => {
+      const positions: Record<string, { x: number; y: number }> = {};
+      const visited = new Set<string>();
+      const levelX: Record<number, number> = {};
+      
+      // ConditionNode의 분기 타겟들을 찾기
+      const conditionBranches = new Map<string, string[]>(); // conditionNodeId -> [targets]
+      snippet.data.nodes.forEach(node => {
+        if (node.type === "ConditionNode") {
+          const targets = new Set<string>();
+          (node.params?.conditions || []).forEach((cond: any) => {
+            if (cond.target) targets.add(cond.target);
+          });
+          if (node.params?.default_target) {
+            targets.add(node.params.default_target);
+          }
+          conditionBranches.set(node.id, Array.from(targets));
+        }
+      });
+
+      // BFS로 레벨별 노드 배치
+      const queue: Array<{ id: string; level: number; branchIndex?: number; parentId?: string }> = [];
+      const firstNode = snippet.data.nodes[0];
+      if (firstNode) {
+        queue.push({ id: firstNode.id, level: 0 });
+      }
+
+      while (queue.length > 0) {
+        const { id, level, branchIndex, parentId } = queue.shift()!;
+        if (visited.has(id)) continue;
+        visited.add(id);
+
+        // x 좌표: 레벨 기반
+        const x = 100 + level * 550;
+        
+        // y 좌표: 일반 노드는 현재 레벨의 카운터, 분기 노드는 branchIndex 사용
+        let y: number;
+        if (branchIndex !== undefined && parentId) {
+          // 분기 노드: 부모 ConditionNode 기준으로 수직 배치
+          const parentY = positions[parentId]?.y || 200;
+          const branches = conditionBranches.get(parentId) || [];
+          const branchCount = branches.length;
+          
+          // 노드 간격: 노드 높이 + 여유 공간 (최소 350px)
+          const spacing = 350;
+          
+          // 중앙 정렬: 전체 분기의 중간을 부모 y에 맞춤
+          const totalHeight = (branchCount - 1) * spacing;
+          const startY = parentY - (totalHeight / 2);
+          
+          y = startY + branchIndex * spacing;
+        } else {
+          // 일반 노드: 레벨별 카운터
+          levelX[level] = (levelX[level] || 0) + 1;
+          y = 200 + (levelX[level] - 1) * 400; // 간격 증가
+        }
+
+        positions[id] = { x, y };
+
+        // 다음 노드 찾기
+        const currentNode = snippet.data.nodes.find(n => n.id === id);
+        
+        // ConditionNode인 경우: 모든 분기를 같은 레벨에 배치
+        if (currentNode && conditionBranches.has(id)) {
+          const branches = conditionBranches.get(id)!;
+          branches.forEach((targetId, idx) => {
+            queue.push({ 
+              id: targetId, 
+              level: level + 1, 
+              branchIndex: idx,
+              parentId: id
+            });
+          });
+        } else {
+          // 일반 노드: 연결된 다음 노드 찾기
+          snippet.data.edges
+            .filter(e => e.source === id)
+            .forEach(edge => {
+              queue.push({ id: edge.target, level: level + 1 });
+            });
+        }
+      }
+
+      return positions;
+    };
+
+    const nodePositions = calculateNodePositions();
+
     // 스니펫의 노드들을 ReactFlow 노드 형태로 변환
     const newNodes: Node[] = snippet.data.nodes.map((nodeData, index) => ({
       id: nodeData.id,
       type: "BaseNode",
-      position: { 
+      position: nodePositions[nodeData.id] || { 
         x: 100 + index * 350, 
         y: 200 
       },
@@ -1075,48 +1197,106 @@ export function GraphEditor({
           inputs: nodeData.params.inputs || {},
           conditions: nodeData.params.conditions || [],
           default_target: nodeData.params.default_target || "",
+          evaluation_mode: nodeData.params.evaluation_mode || "first_match",
           output: nodeData.output || "condition_result",
+        } : nodeData.type === "MergeNode" ? {
+          inputs: nodeData.params.inputs || {},
+          merge_strategy: nodeData.params.merge_strategy || "concat",
+          separator: nodeData.params.separator || "\n\n---\n\n",
+          output: nodeData.output || "merged_output",
         } : {})
       }
     }));
 
     // 스니펫의 엣지들을 ReactFlow 엣지 형태로 변환 (화살표 포함)
-    const newEdges = snippet.data.edges.map((edge, index) => {
+    // ConditionNode의 경우 conditions에서 자동으로 엣지 생성
+    const edgesWithHandles: any[] = [];
+    const processedConditionNodes = new Set<string>();
+    
+    snippet.data.edges.forEach((edge, index) => {
       const sourceNode = snippet.data.nodes.find(n => n.id === edge.source);
-      let sourceHandle = undefined;
       
-      // ConditionNode에서 나오는 엣지인 경우 올바른 sourceHandle 설정
+      // ConditionNode에서 나오는 엣지인 경우
       if (sourceNode && sourceNode.type === "ConditionNode") {
-        const conditionNode = sourceNode;
-        const conditions = conditionNode.params?.conditions || [];
-        const defaultTarget = conditionNode.params?.default_target || "";
-        
-        // 조건별 target과 매칭되는 sourceHandle 찾기
-        const conditionIndex = conditions.findIndex((cond: any) => cond.target === edge.target);
-        if (conditionIndex !== -1) {
-          sourceHandle = `condition-${conditionIndex}`;
-        } else if (edge.target === defaultTarget) {
-          sourceHandle = "else";
+        // 아직 처리하지 않은 ConditionNode라면 모든 조건에 대해 엣지 생성
+        if (!processedConditionNodes.has(edge.source)) {
+          processedConditionNodes.add(edge.source);
+          
+          const conditionNode = sourceNode;
+          const conditions = conditionNode.params?.conditions || [];
+          const defaultTarget = conditionNode.params?.default_target || "";
+          
+          // 각 조건마다 엣지 생성
+          conditions.forEach((cond: any, condIndex: number) => {
+            edgesWithHandles.push({
+              id: `edge-${edge.source}-condition-${condIndex}`,
+              source: edge.source,
+              target: cond.target,
+              sourceHandle: `condition-${condIndex}`,
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 15,
+                height: 15,
+                color: '#6b7280',
+              },
+              style: {
+                strokeWidth: 2,
+                stroke: '#6b7280',
+              },
+            });
+          });
+          
+          // default_target (ELSE)가 있으면 추가
+          if (defaultTarget) {
+            edgesWithHandles.push({
+              id: `edge-${edge.source}-else`,
+              source: edge.source,
+              target: defaultTarget,
+              sourceHandle: "else",
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 15,
+                height: 15,
+                color: '#6b7280',
+              },
+              style: {
+                strokeWidth: 2,
+                stroke: '#6b7280',
+              },
+            });
+          }
         }
+        // 이미 처리한 ConditionNode는 스킵
+      } else {
+        // 일반 엣지는 그대로 추가
+        edgesWithHandles.push({
+          id: `edge-${index}`,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: undefined,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 15,
+            height: 15,
+            color: '#6b7280',
+          },
+          style: {
+            strokeWidth: 2,
+            stroke: '#6b7280',
+          },
+        });
       }
-      
-      return {
-        id: `edge-${index}`,
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: sourceHandle,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 15,
-          height: 15,
-          color: '#6b7280',
-        },
-        style: {
-          strokeWidth: 2,
-          stroke: '#6b7280',
-        },
-      };
     });
+    
+    const newEdges = edgesWithHandles;
+
+    // 디버그 로깅
+    console.log('[DEBUG] Loaded snippet nodes:', newNodes.map(n => ({
+      id: n.id,
+      type: n.data.nodeType,
+      inputs: n.data.inputs,
+      output: n.data.output
+    })));
 
     setNodes(newNodes);
     setEdges(newEdges);
@@ -1191,6 +1371,8 @@ export function GraphEditor({
               },
             };
           } else if (n.data.nodeType === "ConditionNode") {
+            // 디버그 로깅
+            console.log(`[DEBUG] ConditionNode ${n.id} inputs:`, n.data.inputs);
             return {
               ...baseNode,
               output: n.data.output || "condition_result",
@@ -1198,6 +1380,19 @@ export function GraphEditor({
                 inputs: n.data.inputs || {},
                 conditions: n.data.conditions || [],
                 default_target: n.data.default_target || "",
+                evaluation_mode: n.data.evaluation_mode || "first_match",
+              },
+            };
+          } else if (n.data.nodeType === "MergeNode") {
+            // 디버그 로깅
+            console.log(`[DEBUG] MergeNode ${n.id} inputs:`, n.data.inputs);
+            return {
+              ...baseNode,
+              output: n.data.output || "merged_output",
+              params: {
+                inputs: n.data.inputs || {},
+                merge_strategy: n.data.merge_strategy || "concat",
+                separator: n.data.separator || "\n\n---\n\n",
               },
             };
           }
@@ -1273,6 +1468,7 @@ export function GraphEditor({
         onAddInputNode={onAddInputNode}
         onAddOutputNode={onAddOutputNode}
         onAddConditionNode={onAddConditionNode}
+        onAddMergeNode={onAddMergeNode}
         onLoadSnippet={onLoadSnippet}
       />
 
