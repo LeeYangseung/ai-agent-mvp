@@ -1,433 +1,940 @@
-## AI Agent MVP
+# AI Agent MVP
 
-AI 에이전트(그래프 기반)와 RAG 문서 관리를 제공하는 풀스택 MVP입니다. FastAPI 백엔드, Next.js 프론트엔드, PostgreSQL, Chroma(Vector Store), Kubernetes 배포 구성을 포함합니다.
+> LangGraph 기반의 유연하고 확장 가능한 AI 에이전트 플랫폼
 
-### 주요 기능
-- 그래프 실행: 노드/엣지로 구성된 그래프 실행 및 단계별 결과 확인
-- RAG 문서 관리: 컬렉션 기반 문서 업로드/청크/색인 및 상세 조회
-- 컬렉션 관리: 문서를 논리적으로 그룹화하여 검색 범위 격리 및 관리
-- 시각화 UI: 그래프 에디터, 그래프 관리, 지식 관리 화면 제공
-- 운영 도구: Docker/K8s 매니페스트와 배포 스크립트 제공
+## 📖 목차
 
-### 기술 스택
-- Backend: FastAPI, SQLAlchemy, Alembic, LangChain, LangGraph, ChromaDB, OpenAI SDK
-- Frontend: Next.js 15, React 19, TailwindCSS, Radix UI, React Flow
-- DB/스토리지: PostgreSQL, Chroma (로컬 경로 기반)
-- DevOps: Docker, Kubernetes(Deployment/Service/Ingress), `k8s/deploy.sh`
-
-### 디렉토리 구조(요약)
-```
-backend/           # FastAPI 서비스
-frontend/          # Next.js 앱
-k8s/               # Kubernetes 매니페스트 및 배포 스크립트
-docker/            # Backend, Frontend container 빌드 스크립트
-```
+- [프로젝트 소개](#-프로젝트-소개)
+- [시스템 아키텍처](#-시스템-아키텍처)
+- [주요 기능](#-주요-기능)
+- [빠른 시작](#-빠른-시작)
+- [사용 가이드](#-사용-가이드)
+- [개발자 문서](#-개발자-문서)
 
 ---
 
-### 1) 프론트엔드 매뉴얼
+## 🎯 프로젝트 소개
 
-#### 화면 구성과 사용법
-- 그래프 에디터
-  - 노드 추가/편집: 캔버스에서 노드 추가, 속성 편집, 엣지 연결
-  - 스니핏/채팅: 채팅으로 질문 시 각 노드 실행 결과를 단계별로 확인
-  - State 확인: 실행 중간/최종 `Graph State` 및 `노드 별 실행 결과`를 패널에서 확인
-- 그래프 관리
-  - 그래프 목록/검색/정렬, 단건 상세/수정/삭제
-  - 버전 및 메타 정보 확인(작성자/수정자/시간)
-- 지식 관리
-  - 컬렉션 관리: 컬렉션 생성/수정/삭제, 컬렉션별 문서 그룹화
-  - 문서 업로드(멀티파트): 컬렉션 선택 후 문서 업로드, 목록/필터/페이징
-  - 청킹 방법 선택: Length(길이 기반), Semantic(의미 기반), Hybrid(하이브리드), Paragraph(문단 기반)
-  - 청크 상세: `chunk_index`, `content`, 생성/수정 시간 확인
-  - 벡터 검색: 컬렉션별 독립적인 검색 범위 제공
+AI Agent MVP는 **LangGraph**를 기반으로 구축된 그래프 기반 AI 에이전트 플랫폼입니다. 복잡한 AI 워크플로우를 시각적으로 설계하고 실행할 수 있으며, RAG(Retrieval-Augmented Generation) 기반의 지식 관리 시스템을 통합하여 문서 기반 질의응답을 지원합니다.
 
-#### 청킹 방법 사용 가이드
-문서 생성 시 문서 특성에 맞는 청킹 방법을 선택할 수 있습니다:
+### 💡 LangGraph 철학
 
-1. **Length (길이 기반)** - 기본 권장
-   - 고정된 문자 수로 문서를 분할
-   - **사용 시점**: 짧은 일반 텍스트, 빠른 처리가 필요한 경우
-   - **설정값**: 청킹 사이즈(기본 500), 오버랩 사이즈(기본 100)
-   - **예시**: 뉴스 기사, 블로그 포스트, 짧은 보고서
+이 프로젝트는 LangGraph의 핵심 철학을 따릅니다:
 
-2. **Semantic (의미 기반)**
-   - 임베딩을 사용하여 의미적 유사도 기반으로 분할
-   - **사용 시점**: 주제별 분리가 중요한 문서, 대화 데이터
-   - **설정값**: 임계값 유형(Percentile/Standard Deviation/Interquartile)
-   - **예시**: 인터뷰 기록, 대화 로그, 리포트
-   - **주의**: 임베딩 API 호출로 인해 처리 시간이 길어질 수 있음
+- **그래프 기반 워크플로우**: AI 에이전트의 로직을 노드(Node)와 엣지(Edge)로 구성된 방향성 그래프로 표현합니다.
+- **상태 관리(State Management)**: 각 노드는 공유 상태(State)를 읽고 수정하며, 이를 통해 컨텍스트가 전체 워크플로우에 걸쳐 유지됩니다.
+- **유연한 제어 흐름**: 조건 분기, 루프, 병렬 처리 등 복잡한 제어 흐름을 그래프 구조로 자연스럽게 표현할 수 있습니다.
+- **모듈화와 재사용성**: 각 노드는 독립적인 기능 단위로 설계되어, 다양한 그래프에서 재사용할 수 있습니다.
+- **추적 가능성(Traceability)**: 모든 실행 과정과 상태 변화를 기록하여 디버깅과 분석이 용이합니다.
 
-3. **Hybrid (하이브리드)**
-   - 길이 기반 분할 후 의미 기반으로 재분할
-   - **사용 시점**: 긴 문서를 의미 있는 단위로 분할하면서 크기도 제어
-   - **설정값**: 청킹 사이즈(기본 1000), 오버랩 사이즈(기본 100), 임계값 유형
-   - **예시**: 긴 연구 논문, 기술 문서, 상세 보고서
+### 🎨 설계 원칙
 
-4. **Paragraph (문단 기반)**
-   - Markdown/HTML 구조 또는 문단 구분자를 기준으로 분할
-   - **사용 시점**: 구조화된 문서, 헤더가 있는 문서
+1. **시각적 직관성**: 드래그 앤 드롭 방식의 그래프 에디터로 누구나 쉽게 AI 워크플로우를 설계할 수 있습니다.
+2. **확장 가능성**: 새로운 노드 타입을 추가하여 기능을 확장할 수 있는 플러그인 아키텍처를 지향합니다.
+3. **엔터프라이즈 레디**: 컬렉션 기반 문서 격리, 버전 관리, 감사 추적(Audit Trail) 등 프로덕션 환경에 필요한 기능을 제공합니다.
+
+---
+
+## 🏗️ 시스템 아키텍처
+
+### 전체 구조도
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         사용자 브라우저                            │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Frontend (Next.js 15)                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ 그래프 에디터 │  │  Agent 관리  │  │   지식 관리 (RAG)     │  │
+│  │  (React Flow)│  │  (목록/검색) │  │ (컬렉션/문서/청크)    │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ HTTP/REST API
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Backend (FastAPI)                             │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                    API Layer (v1)                         │  │
+│  │  /graphs  /documents  /collections  /chunks              │  │
+│  └────────────────┬─────────────────────────────────────────┘  │
+│                   │                                             │
+│  ┌────────────────▼─────────────────────────────────────────┐  │
+│  │              Service Layer                                │  │
+│  │  - Graph Service      - Document Service                 │  │
+│  │  - Node Service       - Collection Service               │  │
+│  │  - Edge Service       - Chunk Service                    │  │
+│  └────────────────┬─────────────────────────────────────────┘  │
+│                   │                                             │
+│  ┌────────────────▼─────────────────┐  ┌───────────────────┐  │
+│  │       Graph Runner               │  │  Chunking Utils   │  │
+│  │   (LangGraph Executor)           │  │  - Length         │  │
+│  │                                  │  │  - Semantic       │  │
+│  │  ┌────────────────────────────┐ │  │  - Hybrid         │  │
+│  │  │  Node Implementations     │ │  │  - Paragraph      │  │
+│  │  │  - InputNode             │ │  └───────────────────┘  │
+│  │  │  - PromptNode            │ │                          │
+│  │  │  - RetrievalNode         │ │  ┌───────────────────┐  │
+│  │  │  - ConditionNode         │ │  │  Vector Store     │  │
+│  │  │  - MergeNode             │ │  │   Utils (Chroma)  │  │
+│  │  │  - OutputNode            │ │  └───────────────────┘  │
+│  │  └────────────────────────────┘ │                          │
+│  └────────────────────────────────┘                          │
+└───────────────────┬──────────────────────┬────────────────────┘
+                    │                      │
+        ┌───────────▼────────┐  ┌──────────▼──────────┐
+        │   PostgreSQL       │  │   ChromaDB          │
+        │   (메타데이터)      │  │   (벡터 저장소)      │
+        │                    │  │                     │
+        │  - Graphs          │  │  - Embeddings       │
+        │  - Nodes           │  │  - Collections      │
+        │  - Edges           │  │  - Vector Index     │
+        │  - Documents       │  │                     │
+        │  - Chunks          │  │                     │
+        │  - Collections     │  │                     │
+        │  - Graph History   │  │                     │
+        └────────────────────┘  └─────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│              Infrastructure (Kubernetes)                         │
+│  - Deployments: Backend, Frontend, PostgreSQL                   │
+│  - Services: ClusterIP, LoadBalancer                            │
+│  - Ingress: Nginx Ingress Controller                            │
+│  - ConfigMaps: 환경 변수 관리                                    │
+│  - Secrets: 민감 정보 관리 (DB 크레덴셜, API 키)                  │
+│  - Persistent Volumes: DB 및 벡터 스토어 데이터 영속화            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 데이터 흐름
+
+#### 1️⃣ 그래프 실행 흐름
+
+```
+[사용자] → [그래프 에디터]
+              ↓
+    그래프 정의 생성 (nodes, edges)
+              ↓
+    POST /api/v1/graphs/run-graph
+              ↓
+    [Backend Graph Runner]
+              ↓
+    ┌─────────────────────┐
+    │ 1. 그래프 검증       │
+    │ 2. 실행 가능 그래프  │
+    │    (Runnable) 빌드  │
+    │ 3. 상태 초기화       │
+    └──────────┬──────────┘
+               ↓
+    ┌──────────────────────────────────┐
+    │   노드별 순차/병렬 실행           │
+    │   ┌─────────────────────────┐   │
+    │   │ InputNode               │   │
+    │   │  → state 초기화         │   │
+    │   └────────┬────────────────┘   │
+    │            ↓                     │
+    │   ┌─────────────────────────┐   │
+    │   │ RetrievalNode           │   │
+    │   │  → 벡터 검색 (Chroma)   │   │
+    │   │  → 컨텍스트 추가        │   │
+    │   └────────┬────────────────┘   │
+    │            ↓                     │
+    │   ┌─────────────────────────┐   │
+    │   │ PromptNode              │   │
+    │   │  → LLM 호출 (OpenAI)    │   │
+    │   │  → 응답 생성            │   │
+    │   └────────┬────────────────┘   │
+    │            ↓                     │
+    │   ┌─────────────────────────┐   │
+    │   │ ConditionNode           │   │
+    │   │  → 조건 평가            │   │
+    │   │  → 다음 경로 결정       │   │
+    │   └────────┬────────────────┘   │
+    │            ↓                     │
+    │   ┌─────────────────────────┐   │
+    │   │ OutputNode              │   │
+    │   │  → 최종 결과 포맷팅     │   │
+    │   └─────────────────────────┘   │
+    └──────────────┬───────────────────┘
+                   ↓
+    ┌──────────────────────────────┐
+    │ 실행 결과 반환               │
+    │ - final_state (전체 상태)   │
+    │ - node_results (노드별 결과)│
+    │ - execution_history         │
+    └──────────┬───────────────────┘
+               ↓
+    [Frontend] 결과 시각화
+               ↓
+    [사용자] 결과 확인
+```
+
+#### 2️⃣ 지식 관리(RAG) 흐름
+
+```
+[사용자] → [지식 관리 UI]
+              ↓
+    1. 컬렉션 생성
+       POST /api/v1/collections
+              ↓
+       [PostgreSQL] 컬렉션 메타데이터 저장
+       [ChromaDB] 컬렉션 생성
+              ↓
+    2. 문서 업로드
+       POST /api/v1/documents (multipart/form-data)
+              ↓
+       [Backend Document Service]
+              ↓
+       ┌───────────────────────────────┐
+       │ 파일 수신 및 텍스트 추출       │
+       │  - PDF → PyPDF                │
+       │  - TXT → 직접 읽기            │
+       └────────┬──────────────────────┘
+                ↓
+       ┌───────────────────────────────┐
+       │ 청킹 전략 선택 및 실행         │
+       │  - Length: 고정 길이 분할     │
+       │  - Semantic: 의미 기반 분할   │
+       │  - Hybrid: 길이+의미 혼합     │
+       │  - Paragraph: 문단 기반       │
+       └────────┬──────────────────────┘
+                ↓
+       ┌───────────────────────────────┐
+       │ 임베딩 생성                   │
+       │  OpenAI text-embedding-3-small│
+       └────────┬──────────────────────┘
+                ↓
+       ┌───────────────────────────────┐
+       │ 저장                          │
+       │  [PostgreSQL] 문서/청크 메타  │
+       │  [ChromaDB] 벡터 + 텍스트     │
+       └───────────────────────────────┘
+              ↓
+    3. 검색 (RetrievalNode 실행 시)
+       query = "사용자 질문"
+              ↓
+       [Vector Store Utils]
+              ↓
+       query_embedding = embed(query)
+              ↓
+       [ChromaDB] 유사도 검색
+              ↓
+       상위 K개 청크 반환
+              ↓
+       [PromptNode] 컨텍스트로 활용
+              ↓
+       [LLM] 답변 생성
+```
+
+#### 3️⃣ Agent 관리 흐름
+
+```
+[사용자] → [Agent 관리 UI]
+              ↓
+    1. 그래프 저장
+       POST /api/v1/graphs
+       {
+         name, description, version,
+         nodes: [...],
+         edges: [...]
+       }
+              ↓
+       [Backend Graph Service]
+              ↓
+       [PostgreSQL] 트랜잭션
+       - graphs 테이블에 그래프 메타 저장
+       - nodes 테이블에 각 노드 저장
+       - edges 테이블에 각 엣지 저장
+              ↓
+    2. 그래프 조회/검색
+       GET /api/v1/graphs?name=xxx&sort=updated_at:desc
+              ↓
+       [PostgreSQL] 필터링 + 정렬 + 페이징
+              ↓
+       [Frontend] 목록 표시
+              ↓
+    3. 그래프 불러오기
+       GET /api/v1/graphs/{id}
+              ↓
+       [Backend] 그래프 + 노드 + 엣지 조회
+              ↓
+       [Frontend] 그래프 에디터에 렌더링
+              ↓
+    4. 그래프 수정
+       PUT /api/v1/graphs/{id}
+              ↓
+       [Backend] 기존 노드/엣지 삭제 후 재생성
+              ↓
+       [PostgreSQL] 업데이트
+```
+
+### 컴포넌트 역할
+
+| 컴포넌트 | 역할 | 주요 기술 |
+|---------|------|----------|
+| **Frontend** | 사용자 인터페이스 제공, 그래프 시각화 | Next.js 15, React 19, React Flow, TailwindCSS |
+| **Backend** | 비즈니스 로직, API 제공, 그래프 실행 | FastAPI, LangChain, LangGraph, SQLAlchemy |
+| **PostgreSQL** | 메타데이터 영속화 (그래프, 문서, 사용자 등) | PostgreSQL 14+ |
+| **ChromaDB** | 벡터 임베딩 저장 및 유사도 검색 | Chroma 1.1.0 |
+| **Kubernetes** | 컨테이너 오케스트레이션, 배포, 스케일링 | K8s, Nginx Ingress |
+
+---
+
+## ✨ 주요 기능
+
+### 1. 그래프 에디터
+
+드래그 앤 드롭 방식으로 AI 워크플로우를 시각적으로 설계할 수 있는 에디터입니다.
+
+#### 지원 노드 타입
+
+| 노드 타입 | 설명 | 입력 | 출력 |
+|---------|------|------|------|
+| **InputNode** | 워크플로우 시작점, 초기 상태 설정 | 사용자 입력 (질문, 파라미터) | 초기화된 state |
+| **PromptNode** | LLM 호출, 템플릿 기반 프롬프트 생성 | state (컨텍스트) | LLM 응답 추가된 state |
+| **RetrievalNode** | 벡터 검색, 관련 문서 조회 | query, collection_name | 검색된 컨텍스트 추가된 state |
+| **ConditionNode** | 조건 분기, 동적 경로 결정 | state | 다음 노드 ID (분기 경로) |
+| **MergeNode** | 여러 경로 합류, 상태 병합 | 여러 state | 병합된 state |
+| **OutputNode** | 워크플로우 종료점, 최종 결과 포맷팅 | state | 최종 응답 |
+
+#### 노드 설정 상세
+
+##### InputNode
+- **역할**: 사용자의 질문이나 초기 파라미터를 받아 그래프 실행의 시작점 역할
+- **설정 항목**:
+  - `input_key`: 입력값이 저장될 state 키 (기본값: "input")
+  - `initial_params`: 추가 초기 파라미터 (JSON 형태)
+
+##### PromptNode
+- **역할**: 템플릿 기반으로 프롬프트를 생성하고 LLM을 호출하여 응답 생성
+- **설정 항목**:
+  - `system_prompt`: 시스템 메시지 템플릿
+  - `user_prompt`: 사용자 메시지 템플릿
+  - `model`: 사용할 LLM 모델 (예: gpt-4o, gpt-4o-mini)
+  - `temperature`: 생성 다양성 (0.0~2.0)
+  - `output_key`: 응답이 저장될 state 키
+- **템플릿 변수**: `{variable_name}` 형식으로 state 값을 참조 가능
+
+##### RetrievalNode
+- **역할**: 지정된 컬렉션에서 벡터 유사도 검색을 수행하여 관련 문서 조회
+- **설정 항목**:
+  - `collection_name`: 검색할 컬렉션 이름 (필수)
+  - `query_key`: 검색 질의가 있는 state 키 (기본값: "input")
+  - `output_key`: 검색 결과가 저장될 state 키 (기본값: "context")
+  - `top_k`: 반환할 최대 문서 개수 (기본값: 5)
+
+##### ConditionNode
+- **역할**: state 값을 평가하여 다음 실행 경로를 결정 (if-else, 루프 구현 가능)
+- **설정 항목**:
+  - `condition_type`: 조건 유형 (equals, contains, greater_than, less_than, exists 등)
+  - `check_key`: 검사할 state 키
+  - `condition_value`: 비교 기준값
+  - `true_next`: 조건 참일 때 다음 노드 ID
+  - `false_next`: 조건 거짓일 때 다음 노드 ID
+
+##### MergeNode
+- **역할**: 여러 병렬 실행 경로의 결과를 하나로 합침
+- **설정 항목**:
+  - `merge_strategy`: 병합 전략 (merge, replace, append)
+  - `merge_keys`: 병합할 state 키 목록
+
+##### OutputNode
+- **역할**: 최종 결과를 포맷팅하고 워크플로우 종료
+- **설정 항목**:
+  - `output_key`: 최종 출력으로 사용할 state 키
+  - `format`: 출력 포맷 (text, json, markdown)
+
+#### 사용 방법
+
+1. **노드 추가**: 좌측 노드 팔레트에서 노드를 드래그하여 캔버스에 배치
+2. **노드 설정**: 노드를 클릭하여 우측 속성 패널에서 설정 편집
+3. **엣지 연결**: 노드의 출력 핸들을 다음 노드의 입력 핸들로 드래그하여 연결
+4. **그래프 저장**: 상단 "저장" 버튼으로 그래프를 데이터베이스에 저장
+5. **실행 및 테스트**: 
+   - 하단 스니핏 패널에서 입력값을 넣고 "실행" 클릭
+   - 각 노드의 실행 결과를 단계별로 확인
+   - 최종 State 및 노드별 출력값 검토
+
+#### 실행 결과 확인
+
+그래프 실행 시 다음 정보를 확인할 수 있습니다:
+
+- **Node Results**: 각 노드의 실행 결과 (입력, 출력, 실행 시간)
+- **Final State**: 모든 노드 실행 후 최종 상태
+- **Execution History**: 노드 실행 순서 및 타임라인
+- **에러 정보**: 실행 중 발생한 예외 및 스택 트레이스
+
+### 2. Agent 관리
+
+저장된 그래프(Agent)를 관리하는 화면입니다.
+
+#### 기능
+
+- **목록 조회**: 모든 그래프를 카드 형태로 표시
+- **검색**: 이름, 설명으로 그래프 검색
+- **정렬**: 생성일, 수정일, 이름순 정렬
+- **필터링**: 버전, 작성자별 필터
+- **상세 보기**: 그래프 메타데이터 및 통계 확인
+  - 버전 정보
+  - 작성자/수정자
+  - 노드/엣지 개수
+  - 실행 이력 통계
+- **편집**: 그래프 에디터로 불러와 수정
+- **삭제**: 그래프 및 관련 노드/엣지 삭제
+- **복제**: 기존 그래프를 복사하여 새 그래프 생성
+
+#### 버전 관리
+
+그래프는 자동으로 버전이 관리됩니다:
+- 새 그래프 생성 시: `version = 1`
+- 그래프 수정 시: 자동으로 버전 증가
+- 이전 버전 조회 및 복원 가능 (향후 지원 예정)
+
+### 3. 지식 관리 (RAG)
+
+문서를 업로드하고 벡터 검색을 통해 AI가 답변할 수 있는 지식 베이스를 구축합니다.
+
+#### 3.1 컬렉션 관리
+
+컬렉션은 문서를 논리적으로 그룹화하여 검색 범위를 격리하는 단위입니다.
+
+**사용 예시:**
+- 프로젝트별 분리: `project_alpha`, `project_beta`
+- 문서 타입별 분리: `contracts`, `manuals`, `policies`
+- 사용자별 격리: `user_123`, `team_sales`
+
+**기능:**
+- 컬렉션 생성/수정/삭제
+- 컬렉션별 문서 개수 확인
+- 컬렉션 검색 및 정렬
+
+**주의사항:**
+- 문서가 포함된 컬렉션은 삭제 불가 (먼저 문서 삭제 필요)
+- RetrievalNode에서 `collection_name` 파라미터로 검색 범위 지정
+
+#### 3.2 문서 관리
+
+**지원 파일 형식:**
+- PDF (`.pdf`)
+- 텍스트 (`.txt`, `.md`)
+
+**문서 업로드 프로세스:**
+
+1. **파일 선택 및 컬렉션 지정**
+   - 멀티파일 업로드 지원
+   - 업로드 시 컬렉션 필수 선택
+
+2. **청킹 방법 선택**
+
+   문서의 특성에 맞는 청킹 전략을 선택하세요:
+
+   ##### Length (길이 기반) - 기본 권장
+   
+   - **동작 방식**: 고정된 문자 수로 문서를 균등 분할
+   - **사용 시점**: 
+     - 짧은 일반 텍스트 (뉴스, 블로그)
+     - 빠른 처리가 필요한 경우
+     - 문맥보다 속도가 중요한 경우
+   - **설정값**:
+     - `청킹 사이즈`: 각 청크의 최대 문자 수 (기본 500, 권장 300-1000)
+     - `오버랩 사이즈`: 청크 간 중복 문자 수 (기본 100, 청킹 사이즈의 10-20% 권장)
+   - **장점**: 빠른 처리, 예측 가능한 크기, API 비용 없음
+   - **단점**: 문장/단락 중간에서 분할될 수 있음
+
+   ##### Semantic (의미 기반)
+   
+   - **동작 방식**: 문장 단위로 임베딩을 생성하고 의미적 유사도가 크게 변하는 지점에서 분할
+   - **사용 시점**:
+     - 주제별 분리가 중요한 문서 (인터뷰, 대화 로그)
+     - 자연스러운 주제 전환 지점에서 분할하고 싶을 때
+     - 청크 크기보다 의미적 응집성이 중요한 경우
+   - **설정값**:
+     - `임계값 유형`: 분할 지점 결정 방식
+       - **Percentile (백분위수)**: 거리 분포의 95%를 기준으로 분할 - 균형잡힌 청크 (기본 권장)
+       - **Standard Deviation (표준편차)**: 평균 + 3σ 기준 - 명확한 주제 전환만 감지
+       - **Interquartile (사분위수)**: IQR 기반 - 이상치에 강건, 안정적
+   - **장점**: 의미적으로 응집력 있는 청크, 자연스러운 주제 단위
+   - **단점**: 임베딩 API 비용, 처리 시간 증가, 청크 크기 불균등
+   - **주의**: 긴 문서는 처리 시간이 매우 길어질 수 있음
+
+   ##### Hybrid (하이브리드)
+   
+   - **동작 방식**: 
+     1. 1단계: Length 방식으로 큰 청크 생성
+     2. 2단계: 각 청크를 Semantic 방식으로 재분할
+   - **사용 시점**:
+     - 긴 문서를 의미 있는 단위로 분할하되 크기도 제어하고 싶을 때
+     - 연구 논문, 기술 문서, 상세 보고서
+   - **설정값**:
+     - `청킹 사이즈`: 1단계 분할 크기 (기본 1000)
+     - `오버랩 사이즈`: 1단계 오버랩 크기 (기본 100)
+     - `임계값 유형`: 2단계 의미 분할 기준 (Semantic과 동일)
+   - **장점**: 청크 크기 제어 + 의미적 응집성 확보
+   - **단점**: 가장 긴 처리 시간, 높은 API 비용
+   - **추천**: 긴 문서 (5000자 이상) 처리 시
+
+   ##### Paragraph (문단 기반)
+   
+   - **동작 방식**: 문서 구조(헤더, 문단 구분자)를 기준으로 분할
+     - Markdown: `#`, `##`, `###` 헤더 기준
+     - HTML: `<h1>`, `<h2>`, `<h3>` 태그 기준
+     - 일반 텍스트: `\n\n` (빈 줄) 기준
+   - **사용 시점**:
+     - 구조화된 문서 (위키, 매뉴얼, 정책 문서)
+     - Markdown 또는 HTML 파일
+     - 원래 문서 구조를 보존하고 싶을 때
    - **설정값**: 없음 (자동 감지)
-   - **예시**: 위키 문서, 기술 매뉴얼, 정책 문서, Markdown 파일
+   - **장점**: 원래 문서 구조 보존, 빠른 처리, API 비용 없음
+   - **단점**: 구조화되지 않은 문서는 비효율적, 청크 크기 불균등
+   - **추천**: 기술 문서, 정책 문서, Markdown 파일
 
-**임계값 유형 설명** (Semantic/Hybrid 사용 시):
-- **Percentile (백분위수)**: 의미 차이의 상위 95%를 기준으로 분할 - 균형잡힌 청크 생성 (기본 권장)
-- **Standard Deviation (표준편차)**: 평균에서 3 표준편차 이상 벗어난 지점에서 분할 - 명확한 주제 전환 감지
-- **Interquartile (사분위수)**: 사분위수 범위를 기준으로 분할 - 이상치에 강건하며 안정적인 청크 생성
+   **청킹 방법 선택 가이드:**
 
-#### 노드의 역할과 I/O
-- 입력 노드(Input): 사용자 질문, 시스템 설정 등 초기 컨텍스트 생성 (output: 초기 state)
-- 프롬프트 노드(Prompt): 템플릿 기반 메시지 생성 및 LLM 호출 (input: state, output: 답변/중간 결과)
-- 리트리벌 노드(Retrieval): 지정된 컬렉션의 벡터 스토어에서 관련 컨텍스트 검색 (input: 질의 + 컬렉션명, output: 컨텍스트 목록)
-- 조건 노드(Condition): 분기/루프 등 조건 처리 (input: state, output: 분기된 흐름)
-- 출력 노드(Output): 최종 응답/요약/구조화 결과 반환 (input: 최종 state)
+   | 문서 특성 | 권장 방법 | 예시 |
+   |---------|---------|------|
+   | 짧은 일반 텍스트 (< 5000자) | Length | 뉴스 기사, 블로그 포스트 |
+   | 긴 일반 텍스트 (> 5000자) | Hybrid | 연구 논문, 보고서 |
+   | 주제 전환이 많은 문서 | Semantic | 인터뷰, 대화 로그 |
+   | 구조화된 문서 | Paragraph | 위키, 매뉴얼, Markdown |
+   | 빠른 프로토타입 | Length | 모든 문서 |
 
-입·출력은 그래프 상태(State)에 합류하며, 노드 간 연결(엣지)로 데이터가 전달됩니다.
+3. **임베딩 생성 및 저장**
+   - OpenAI `text-embedding-3-small` 모델 사용
+   - PostgreSQL: 문서 메타데이터 및 청크 텍스트 저장
+   - ChromaDB: 벡터 임베딩 저장
 
-#### To Do: 예정 기능
-- 노드 추가: Merge Node, Web Search Node, Tool Node, MCP Node 등
-- 지식관리 강화: Reranker, HyDE, Query Expansion 등
+4. **문서 조회**
+   - 목록: 필터링 (컬렉션, 상태, 이름), 정렬, 페이징
+   - 상세: 문서 정보 + 모든 청크 내역 확인
+     - 청크별 인덱스 번호
+     - 청크 내용
+     - 생성/수정 시간
 
----
+5. **문서 삭제**
+   - PostgreSQL 및 ChromaDB에서 동시 삭제
+   - 연관된 모든 청크도 삭제
 
-### 2) 백엔드 사용 매뉴얼(개발자용)
+#### 3.3 벡터 검색 동작 방식
 
-#### 개요
-- 앱 엔트리: `backend/app/main.py`
-- API 베이스: `/api/v1`
-- 공통: CORS 허용, 요청 로깅/Request-ID, 전역 예외 처리, 시작 시 테이블 생성
+RetrievalNode 실행 시:
 
-#### 엔드포인트(요약)
-- 그래프 실행
-  - `POST /api/v1/graphs/run-graph` — 요청 그래프(nodes/edges) 실행
-- 그래프 관리
-  - `GET /api/v1/graphs` — 목록/검색/정렬/페이징
-  - `GET /api/v1/graphs/{id}` — 단건 조회
-  - `POST /api/v1/graphs` — 생성 (옵션: `nodes`, `edges` 포함 가능)
-  - `PUT /api/v1/graphs/{id}` — 수정 (그래프/노드/엣지 동시 갱신 가능)
-  - `DELETE /api/v1/graphs/{id}` — 삭제
-- 컬렉션 관리
-  - `GET /api/v1/collections` — 목록(필터: 이름, 페이징)
-  - `GET /api/v1/collections/{id}` — 상세(문서 개수 포함)
-  - `POST /api/v1/collections` — 생성
-  - `PUT /api/v1/collections/{id}` — 수정
-  - `DELETE /api/v1/collections/{id}` — 삭제 (문서가 없을 때만 가능)
-- 문서 관리
-  - `GET /api/v1/documents` — 목록(필터: 컬렉션ID/이름/상태/페이지 등)
-  - `GET /api/v1/documents/{id}` — 상세(청크 포함)
-  - `POST /api/v1/documents` — 생성(멀티파트, collection_id + 청킹 방법 선택)
-  - `PUT /api/v1/documents/{id}` — 수정
-  - `DELETE /api/v1/documents/{id}` — 삭제 (벡터 스토어에서도 삭제)
-
-#### 청킹 방법 (Chunking Methods)
-
-문서 업로드 시 다양한 청킹 전략을 선택할 수 있으며, 각 방법은 문서 특성에 따라 최적화되어 있습니다.
-
-**1. Length-based Chunking (길이 기반)**
-- **알고리즘**: `RecursiveCharacterTextSplitter` 사용
-- **동작 방식**: 지정된 문자 수로 문서를 균등하게 분할하며, 구분자 우선순위(`\n\n` → `\n` → ` ` → `""`)에 따라 자연스러운 경계에서 분할 시도
-- **파라미터**:
-  - `chunk_size`: 각 청크의 최대 문자 수 (기본값: 500)
-  - `overlap_size`: 청크 간 중복 문자 수 (기본값: 100) - 문맥 연속성 유지
-- **장점**: 빠른 처리 속도, 예측 가능한 청크 크기, API 호출 비용 없음
-- **단점**: 문맥을 고려하지 않아 문장/단락 중간에서 분할될 수 있음
-- **추천 사용 사례**: 일반 텍스트, 뉴스 기사, 블로그 포스트, 빠른 프로토타이핑
-
-**2. Semantic Chunking (의미 기반)**
-- **알고리즘**: `SemanticChunker` + OpenAI Embeddings 사용
-- **동작 방식**: 
-  1. 문장 단위로 임베딩 생성
-  2. 인접 문장 간 의미적 유사도(코사인 거리) 계산
-  3. 임계값을 초과하는 지점(의미가 크게 변하는 지점)에서 분할
-- **파라미터**:
-  - `breakpoint_threshold_type`: 분할 임계값 결정 방식
-    - `percentile`: 거리 분포의 95 백분위수 사용 (기본 권장)
-    - `standard_deviation`: 평균 + 3×표준편차 사용
-    - `interquartile`: IQR(Inter-Quartile Range) 기반 이상치 제거
-- **장점**: 의미적으로 응집력 있는 청크 생성, 주제별 자연스러운 분리
-- **단점**: 임베딩 API 호출로 인한 비용 및 시간 증가, 청크 크기 불균등
-- **추천 사용 사례**: 인터뷰/대화 기록, 주제가 자주 바뀌는 문서, 리포트
-
-**3. Hybrid Chunking (하이브리드)**
-- **알고리즘**: Length + Semantic 2단계 처리
-- **동작 방식**:
-  1. 1단계: `RecursiveCharacterTextSplitter`로 큰 청크 생성 (기본 1000자)
-  2. 2단계: 각 청크를 `SemanticChunker`로 의미 기반 재분할
-- **파라미터**:
-  - `chunk_size`: 1단계 분할 크기 (기본값: 1000)
-  - `overlap_size`: 1단계 오버랩 크기 (기본값: 100)
-  - `breakpoint_threshold_type`: 2단계 의미 분할 임계값
-- **장점**: 청크 크기 제어 + 의미적 응집성 확보, 긴 문서 처리 효율적
-- **단점**: 가장 긴 처리 시간, API 비용 증가
-- **추천 사용 사례**: 긴 연구 논문, 기술 문서, 복잡한 보고서
-
-**4. Paragraph Chunking (문단 기반)**
-- **알고리즘**: 문서 구조 기반 파서 사용
-- **동작 방식**:
-  - Markdown: `MarkdownHeaderTextSplitter`로 헤더(`#`, `##`, `###`) 기준 분할
-  - HTML: `HTMLHeaderTextSplitter`로 태그(`<h1>`, `<h2>`, `<h3>`) 기준 분할
-  - 일반 텍스트: 문단 구분자(`\n\n`) 기준 분할
-- **파라미터**: 없음 (문서 구조 자동 감지)
-- **장점**: 문서의 원래 구조 보존, 빠른 처리, 추가 API 비용 없음
-- **단점**: 구조화되지 않은 문서에는 비효율적, 청크 크기 불균등
-- **추천 사용 사례**: 위키 문서, 기술 매뉴얼, Markdown/HTML 파일, 정책 문서
-
-**청킹 방법 선택 가이드**:
-```
-문서 특성            → 권장 방법
-─────────────────────────────────────
-짧은 일반 텍스트      → Length
-긴 문서 (빠른 처리)   → Length (큰 chunk_size)
-의미 단위 분리 필요   → Semantic
-긴 문서 (의미 보존)   → Hybrid
-구조화된 문서         → Paragraph
-대화/인터뷰          → Semantic
-기술 문서/매뉴얼      → Paragraph 또는 Hybrid
-```
-
-**임베딩 모델**: 모든 청킹 후 `text-embedding-3-small` (OpenAI) 사용하여 벡터화
-
-#### 그래프 구조 개념
-- 노드(Node): 입력/프롬프트/리트리벌/조건/출력 등 처리 단위를 정의
-  - RetrievalNode: `params.collection` 파라미터로 검색할 컬렉션 지정 가능
-- 엣지(Edge): 노드 간 데이터 플로우(방향성) 정의
-- 그래프 히스토리(Graph History): 실행 시점/입출력/결과를 기록하여 추적/디버깅에 활용
-
-#### 컬렉션 기능
-- **컬렉션이란?**: 문서를 논리적으로 그룹화하는 단위로, ChromaDB의 Collection 개념 활용
-- **사용 사례**:
-  - 프로젝트별 문서 분리 (project_a, project_b)
-  - 문서 타입별 분리 (contracts, manuals, reports)
-  - 사용자별 문서 격리 (user_123, user_456)
-- **검색 격리**: RetrievalNode에서 특정 컬렉션만 검색하여 검색 범위 제한
-- **주의사항**:
-  - 문서 생성 시 collection_id 필수
-  - 컬렉션 삭제 시 내부 문서가 있으면 삭제 불가
-  - 문서 삭제 시 벡터 스토어에서도 자동 삭제
+1. 사용자 질의 → 임베딩 변환
+2. ChromaDB에서 지정된 컬렉션 내 유사도 검색 (코사인 유사도)
+3. 상위 K개 청크 반환
+4. 청크 내용을 PromptNode의 컨텍스트로 전달
+5. LLM이 컨텍스트 기반 답변 생성
 
 ---
 
-### 3) 개발
+## 🚀 빠른 시작
 
-#### 사전 준비
-- Node.js 20+ / npm 또는 pnpm
-- Python 3.11+
-- PostgreSQL (로컬 또는 컨테이너)
+### 사전 요구사항
 
-#### 환경 변수(요약)
-- Frontend(`k8s/configmap.yaml` 참고)
-  - `NEXT_PUBLIC_API_BASE_URL`(선택): 비우면 `window.location.origin + /api/v1`
-  - `NODE_ENV`: production 권장
-- Backend
-  - `LOG_LEVEL`: error/warning/info/debug
-  - `LOG_FILE_PATH`: "logs/app/app.log"
-  - `DATABASE_URL`: "postgresql+asyncpg://DB_UESER:DB_PASSWORD@DB_IP:DB_PORT/DB_DATABASE"
-  - `OPENAI_SECRET_KEY`: "YOUR_OPENAI_SECRET_KEY"
-  - `VECTOR_STORE_DATA_DIR`: "app/data"
-  - `ROOT_PATH`: ""
-  - `OPENAPI_URL`:  "/openapi.json"
-  - `DOCS_URL`:  "/docs"
-  - `REDOC_URL`:  "/redoc"
+| 항목 | 버전 | 용도 |
+|-----|------|------|
+| Docker | 20.10+ | 컨테이너 빌드 |
+| Minikube | 1.25+ | 로컬 Kubernetes 클러스터 (개발용) |
+| kubectl | 1.25+ | Kubernetes 클러스터 관리 |
+| OpenAI API Key | - | LLM 및 임베딩 API |
 
-#### 로컬 실행
-- 백엔드
-  ```
-  cd backend
-  uv sync -- frozen
-  ./run.sh
-  ```
-  - 기본 포트: `8000` / Swagger 문서: `http://localhost:8000/docs`
+### 옵션 1: Minikube로 로컬 실행 (권장)
 
-- 프론트엔드
-  ```
-  cd frontend
-  npm install
-  npm run dev
-  ```
-  - 기본 포트: `3000`
+로컬 환경에서 전체 스택을 Kubernetes에 배포하여 테스트할 수 있습니다.
 
----
-
-### 4) 배포
-
-#### Docker Build
-```bash
-cd docker
-./docker_build.sh
-
-# 개별 빌드도 가능
-./docker_build.sh --backend-only
-./docker_build.sh --frontend-only
-```
-
-#### Kubernetes 배포
-
-##### 사전 요구사항
-- Kubernetes 클러스터 (minikube, kind, EKS, GKE, AKS 등)
-- `kubectl` CLI 도구 설치 및 클러스터 연결
-- Docker 이미지 빌드 완료
-
-##### 로컬 개발 환경 (Minikube - 선택사항)
-
-Minikube는 로컬에서 Kubernetes를 실행하기 위한 도구입니다. 로컬 개발/테스트 환경에서 사용하며, 프로덕션 환경에서는 관리형 Kubernetes 서비스(EKS, GKE, AKS 등)를 사용하세요.
+#### 1단계: Minikube 시작
 
 ```bash
 cd k8s
-
-# Minikube 시작 (자동으로 Ingress addon 활성화 및 Tunnel 실행)
 ./minikube.sh start
-
-# 상태 확인
-./minikube.sh status
-
-# 중지 (데이터 보존)
-./minikube.sh stop
-
-# 완전 삭제 (데이터 삭제)
-./minikube.sh stop --delete
 ```
 
-**Minikube 데이터 영속성:**
-- ✅ `minikube stop` → `minikube start`: 데이터 보존
-- ✅ Pod 재시작, Deployment 재배포: 데이터 보존
-- ❌ `minikube delete`: 모든 데이터 삭제
+이 명령은 다음을 자동으로 수행합니다:
+- Minikube 클러스터 시작
+- Ingress addon 활성화
+- Minikube Tunnel 실행 (백그라운드)
 
-##### 애플리케이션 배포
-
-```bash
-cd k8s
-
-# 1. Secret 설정 (최초 1회)
-# secret.example.yaml을 참고하여 secret.yaml 생성
-vim secret.yaml
-
-# 2. 전체 배포
-./deploy.sh                   # ConfigMap/Secret/DB/BE/FE/Ingress 전체 배포
-
-# 3. 상태 확인
-./deploy.sh --status          # 배포 상태 확인
-kubectl get pods              # Pod 상태 확인
-kubectl get pvc               # 스토리지 확인
-
-# 개별 배포 옵션
-./deploy.sh --backend-only    # 백엔드만
-./deploy.sh --frontend-only   # 프론트엔드만
-./deploy.sh --config-only     # ConfigMap/Secret만
-
-# 네임스페이스 지정
-./deploy.sh -n production     # 프로덕션 네임스페이스
-./deploy.sh -n development    # 개발 네임스페이스
-
-# 삭제
-./deploy.sh --delete          # 모든 리소스 삭제
-```
-
-##### 접속 방법
-
-**1) Ingress 사용 (권장 - Minikube 환경)**
-
-Minikube Tunnel이 실행되면 Ingress를 통해 접속할 수 있습니다:
+#### 2단계: Docker 이미지 빌드
 
 ```bash
-# 1. /etc/hosts 파일 설정 (최초 1회)
-sudo sh -c 'echo "127.0.0.1 aiagent.local" >> /etc/hosts'
-
-# 2. Ingress 확인
-kubectl get ingress
-
-# 예시 출력:
-# NAME              CLASS   HOSTS           ADDRESS     PORTS   AGE
-# aiagent-ingress   nginx   aiagent.local   127.0.0.1   80      5m
-
-# 3. 브라우저에서 접속
-# Frontend: http://aiagent.local/
-# Backend API: http://aiagent.local/api/
-# API Docs: http://aiagent.local/api/docs
-```
-
-**참고:** 
-- Ingress에 `host: aiagent.local`이 설정되어 있어 해당 도메인으로만 접속 가능합니다
-- `localhost`로 접속하려면 `ingress.yaml`의 `host` 부분을 제거하세요
-
-**Tunnel 확인 및 시작:**
-```bash
-# Tunnel 상태 확인
-cd k8s
-./minikube.sh status
-
-# Tunnel 시작 (필요시)
-./minikube.sh tunnel
-```
-
-**2) Port Forwarding (개별 Service 테스트)**
-
-Tunnel 없이 개별 Service를 테스트할 때:
-
-```bash
-# Backend API
-kubectl port-forward svc/ai-agent-backend-service 8000:8000
-
-# Frontend
-kubectl port-forward svc/ai-agent-frontend-service 3000:3000
-
-# PostgreSQL
-kubectl port-forward svc/postgres-service 5432:5432
-
-# 접속: http://localhost:8000, http://localhost:3000
-```
-
-**3) 프로덕션 환경**
-
-관리형 Kubernetes(EKS, GKE, AKS)에서는 LoadBalancer IP 또는 도메인으로 직접 접근:
-
-```bash
-# LoadBalancer External IP 확인
-kubectl get services
-kubectl get ingress
-```
-
-##### 이미지 업데이트
-
-```bash
-# 1. 이미지 재빌드
-cd docker
+cd ../docker
 ./docker_build.sh
+```
 
-# 2. Minikube에 이미지 로드 (Minikube 사용 시)
+이 스크립트는 Backend와 Frontend 이미지를 모두 빌드합니다.
+
+#### 3단계: Minikube에 이미지 로드
+
+```bash
 cd ../k8s
 minikube image load ai-agent-backend:latest
 minikube image load ai-agent-frontend:latest
+```
 
-# 3. Deployment 재시작
+#### 4단계: Secret 설정
+
+```bash
+# secret.example.yaml을 참고하여 secret.yaml 생성
+cp secret.example.yaml secret.yaml
+vim secret.yaml  # OpenAI API 키 및 DB 크레덴셜 입력
+```
+
+`secret.yaml` 예시:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ai-agent-secret
+type: Opaque
+stringData:
+  OPENAI_SECRET_KEY: "sk-your-openai-api-key-here"
+  DB_USER: "postgres"
+  DB_PASSWORD: "your-secure-password"
+  DB_DATABASE: "ai_agent_db"
+```
+
+#### 5단계: 애플리케이션 배포
+
+```bash
+./deploy.sh
+```
+
+이 스크립트는 다음을 순차적으로 배포합니다:
+- ConfigMap (환경 변수)
+- Secret (민감 정보)
+- PostgreSQL (Persistent Volume 포함)
+- Backend (FastAPI)
+- Frontend (Next.js)
+- Ingress (Nginx)
+
+#### 6단계: 접속 설정
+
+```bash
+# /etc/hosts 파일에 도메인 추가 (최초 1회만)
+sudo sh -c 'echo "127.0.0.1 aiagent.local" >> /etc/hosts'
+```
+
+#### 7단계: 브라우저에서 접속
+
+- **Frontend**: http://aiagent.local/
+- **Backend API Docs**: http://aiagent.local/api/docs
+
+#### 배포 상태 확인
+
+```bash
+./deploy.sh --status
+
+# 또는 kubectl 직접 사용
+kubectl get pods
+kubectl get svc
+kubectl get ingress
+```
+
+#### 로그 확인
+
+```bash
+# Backend 로그
+kubectl logs -f deployment/ai-agent-backend-deployment
+
+# Frontend 로그
+kubectl logs -f deployment/ai-agent-frontend-deployment
+
+# PostgreSQL 로그
+kubectl logs -f deployment/postgres-deployment
+```
+
+#### Minikube 중지
+
+```bash
+# 데이터 보존하고 중지
+./minikube.sh stop
+
+# 완전 삭제 (모든 데이터 삭제)
+./minikube.sh stop --delete
+```
+
+### 옵션 2: Docker Compose로 빠른 실행
+
+> **참고**: 현재 Docker Compose 파일이 포함되어 있지 않습니다. 필요 시 추가 예정입니다.
+
+### 옵션 3: 로컬 개발 환경 (Backend + Frontend 개별 실행)
+
+개발 중 빠른 피드백을 위해 Backend와 Frontend를 각각 로컬에서 실행할 수 있습니다.
+
+#### Backend 실행
+
+```bash
+cd backend
+
+# Python 3.11+ 가상환경 (uv 사용 권장)
+uv sync --frozen
+
+# 환경 변수 설정
+export DATABASE_URL="postgresql+asyncpg://postgres:password@localhost:5432/ai_agent_db"
+export OPENAI_SECRET_KEY="sk-your-openai-api-key"
+export VECTOR_STORE_DATA_DIR="app/data"
+export LOG_LEVEL="info"
+
+# 서버 실행
+./run.sh
+```
+
+Backend는 `http://localhost:8000`에서 실행됩니다.
+
+#### Frontend 실행
+
+```bash
+cd frontend
+
+# 의존성 설치
+npm install
+
+# 개발 서버 실행
+npm run dev
+```
+
+Frontend는 `http://localhost:3000`에서 실행됩니다.
+
+#### PostgreSQL 실행 (로컬)
+
+```bash
+# Docker로 PostgreSQL 실행
+docker run -d \
+  --name postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=ai_agent_db \
+  -p 5432:5432 \
+  postgres:14
+```
+
+---
+
+## 📘 사용 가이드
+
+### 시작하기
+
+1. **로그인**: 현재 인증 없음 (향후 추가 예정)
+2. **화면 이동**: 좌측 사이드바에서 원하는 메뉴 선택
+   - **Graph Editor**: 그래프 설계 및 실행
+   - **Agent Management**: 저장된 그래프 관리
+   - **Knowledge Management**: 문서 및 컬렉션 관리
+
+### 예제 워크플로우: 문서 기반 Q&A 에이전트 만들기
+
+#### 1단계: 컬렉션 및 문서 준비
+
+1. **지식 관리** 메뉴로 이동
+2. **컬렉션 생성**:
+   - 이름: `company_policies`
+   - 설명: `회사 정책 및 규정 문서`
+3. **문서 업로드**:
+   - 컬렉션: `company_policies` 선택
+   - 파일: 회사 정책 PDF 파일 선택
+   - 청킹 방법: **Paragraph** (정책 문서는 구조화되어 있으므로)
+   - "업로드" 클릭
+4. 업로드 완료 후 문서 목록에서 상태가 "completed"인지 확인
+
+#### 2단계: 그래프 설계
+
+1. **그래프 에디터** 메뉴로 이동
+2. **노드 추가**:
+   - **InputNode**: 
+     - ID: `input`
+     - `input_key`: `question`
+   - **RetrievalNode**:
+     - ID: `retrieval`
+     - `collection_name`: `company_policies`
+     - `query_key`: `question`
+     - `output_key`: `context`
+     - `top_k`: 3
+   - **PromptNode**:
+     - ID: `answer`
+     - `system_prompt`: "당신은 회사 정책 전문가입니다. 제공된 컨텍스트를 바탕으로 정확하게 답변하세요."
+     - `user_prompt`: "질문: {question}\n\n컨텍스트:\n{context}\n\n답변:"
+     - `model`: `gpt-4o-mini`
+     - `temperature`: 0.3
+     - `output_key`: `answer`
+   - **OutputNode**:
+     - ID: `output`
+     - `output_key`: `answer`
+
+3. **엣지 연결**:
+   - `input` → `retrieval`
+   - `retrieval` → `answer`
+   - `answer` → `output`
+
+4. **그래프 저장**:
+   - 이름: `회사 정책 Q&A`
+   - 설명: `회사 정책 문서 기반 질의응답 에이전트`
+   - 버전: 1
+
+#### 3단계: 테스트
+
+1. 하단 **스니핏(Snippet)** 패널 열기
+2. 입력 필드에 질문 입력:
+   ```
+   연차 휴가는 몇 일인가요?
+   ```
+3. "실행" 버튼 클릭
+4. **결과 확인**:
+   - **Node Results** 탭: 각 노드의 실행 결과 확인
+     - `retrieval`: 검색된 3개의 청크 내용
+     - `answer`: LLM이 생성한 답변
+   - **Final State** 탭: 최종 상태 딕셔너리
+   - **Execution History** 탭: 실행 순서 및 시간
+
+#### 4단계: Agent 관리에서 재사용
+
+1. **Agent 관리** 메뉴로 이동
+2. "회사 정책 Q&A" 그래프 카드 확인
+3. 필요 시 편집하여 프롬프트 개선 또는 노드 추가
+
+---
+
+## 👩‍💻 개발자 문서
+
+프로젝트 구조 및 개발 관련 상세 문서는 각 디렉토리의 README를 참고하세요:
+
+- **[Backend README](./backend/README.md)**: Backend 소스코드 구조, API 명세, 노드 구현 가이드
+- **[Frontend README](./frontend/README.md)**: Frontend 소스코드 구조, 컴포넌트 설명, 개발 가이드
+- **[Kubernetes README](./k8s/README.md)**: Kubernetes 배포 상세 가이드, 프로덕션 환경 설정
+
+---
+
+## 🔧 문제 해결
+
+### 일반적인 문제
+
+#### 1. Ingress 접속 불가
+
+**증상**: `aiagent.local`로 접속되지 않음
+
+**해결 방법**:
+```bash
+# Minikube Tunnel이 실행 중인지 확인
+cd k8s
+./minikube.sh status
+
+# Tunnel이 중지되어 있으면 재시작
+./minikube.sh tunnel
+
+# /etc/hosts에 도메인이 추가되었는지 확인
+cat /etc/hosts | grep aiagent.local
+```
+
+#### 2. Pod가 ImagePullBackOff 상태
+
+**증상**: `kubectl get pods`에서 Pod가 `ImagePullBackOff` 상태
+
+**원인**: Minikube가 로컬 이미지를 찾지 못함
+
+**해결 방법**:
+```bash
+# 이미지를 Minikube에 로드
+minikube image load ai-agent-backend:latest
+minikube image load ai-agent-frontend:latest
+
+# Pod 재시작
 kubectl rollout restart deployment/ai-agent-backend-deployment
 kubectl rollout restart deployment/ai-agent-frontend-deployment
 ```
 
-##### 프로덕션 환경 배포
+#### 3. Backend API 호출 실패 (CORS 에러)
 
-프로덕션 환경에서는 다음 사항을 추가로 고려하세요:
+**원인**: Backend의 `allow_origins`에 Frontend URL이 없음
 
-- **관리형 Kubernetes**: AWS EKS, GCP GKE, Azure AKS 등 사용
-- **스토리지**: 클라우드 기반 Persistent Volume (EBS, Persistent Disk 등)
-- **Secret 관리**: AWS Secrets Manager, HashiCorp Vault 등 사용
-- **모니터링**: Prometheus, Grafana 등 연동
-- **로깅**: ELK Stack, Loki 등 중앙 집중식 로그 수집
-- **백업**: 데이터베이스 스냅샷 정책 수립
-- **보안**: NetworkPolicy, Pod Security Policy 적용
-- **스케일링**: Horizontal Pod Autoscaler (HPA) 설정
+**해결 방법**:
 
-자세한 내용은 `k8s/README.md`를 참고하세요.
+`backend/app/main.py` 수정:
+```python
+origins = [
+    "http://localhost:3000",
+    "http://aiagent.local",  # 추가
+    # ... 기타 도메인
+]
+```
+
+#### 4. 벡터 검색이 작동하지 않음
+
+**원인**: ChromaDB 데이터 디렉토리 권한 문제 또는 컬렉션 미생성
+
+**해결 방법**:
+```bash
+# Backend Pod에 접속
+kubectl exec -it deployment/ai-agent-backend-deployment -- /bin/bash
+
+# 데이터 디렉토리 확인
+ls -la /app/app/data/index/
+
+# ChromaDB 로그 확인
+kubectl logs deployment/ai-agent-backend-deployment | grep -i chroma
+```
+
+#### 5. OpenAI API 키 오류
+
+**증상**: PromptNode 또는 Semantic Chunking 실행 시 API 키 에러
+
+**해결 방법**:
+```bash
+# Secret 확인
+kubectl get secret ai-agent-secret -o yaml
+
+# Secret 재생성
+vim k8s/secret.yaml  # OPENAI_SECRET_KEY 수정
+kubectl apply -f k8s/secret.yaml
+
+# Backend Pod 재시작
+kubectl rollout restart deployment/ai-agent-backend-deployment
+```
 
 ---
 
-### 문제 해결(트러블슈팅)
-- 404/경로 이슈: 프록시/Ingress 뒤에서는 `ROOT_PATH=/api`에 맞춰 최종 경로가 `/api/v1`가 되도록 구성
-- CORS 오류: 백엔드 `allow_origins`에 실제 프론트 호스트 추가
-- 벡터 인덱스 권한: `VECTOR_STORE_DATA_DIR` 쓰기 가능 경로 확인
-- DB 접속 실패: `DATABASE_URL` 호스트/포트/크리덴셜/Service 이름 확인
+## 📚 추가 자료
 
-### 라이선스/문의
-- 라이선스: 별도 파일이 없으면 내부용으로 사용
-- 문의: 저장소 이슈 또는 팀 담당자에게 연락
+- **LangChain 공식 문서**: https://docs.langchain.com/
+- **LangGraph 공식 문서**: https://langchain-ai.github.io/langgraph/
+- **FastAPI 공식 문서**: https://fastapi.tiangolo.com/
+- **Next.js 공식 문서**: https://nextjs.org/docs
+- **ChromaDB 공식 문서**: https://docs.trychroma.com/
 
+---
 
+## 🛣️ 로드맵
+
+### v1.1 (다음 릴리스)
+- [ ] 사용자 인증 및 권한 관리
+- [ ] 그래프 실행 이력 상세 조회
+- [ ] Reranker 지원 (Cohere, Cross-Encoder)
+- [ ] HyDE (Hypothetical Document Embeddings)
+
+### v1.2
+- [ ] Web Search Node (Google, Bing)
+- [ ] Tool Node (함수 호출)
+- [ ] MCP (Model Context Protocol) Node
+- [ ] 그래프 버전 관리 및 복원
+- [ ] 그래프 템플릿 마켓플레이스
+
+### v2.0
+- [ ] 멀티 에이전트 협업
+- [ ] 실시간 스트리밍 응답
+- [ ] 그래프 성능 모니터링 대시보드
+- [ ] 커스텀 노드 플러그인 시스템
+
+---
+
+## 📄 라이선스
+
+이 프로젝트는 내부용으로 사용됩니다. 별도의 오픈소스 라이선스는 적용되지 않습니다.
+
+## 💬 문의
+
+문제가 발생하거나 제안 사항이 있으면:
+- GitHub Issues에 등록
+- 팀 담당자에게 연락
+
+---
+
+**Happy Coding! 🎉**
