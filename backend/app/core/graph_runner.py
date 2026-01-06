@@ -92,13 +92,6 @@ async def run_graph(graph_json: Dict[str, Any], llm):
       * first_match: str (단일 노드 ID)
       * all_matches: List[str] (병렬 실행할 노드 ID 리스트)
     - 각 노드의 출력: {node_id}_{output_key} 형태로 저장
-
-    Note: TypedDict는 현재 불필요. 향후 복잡도 증가 시 고려.
-
-    하위 호환성:
-    - 구버전 input_key 형식도 지원
-    - template → user_prompt 자동 변환
-    - variables → inputs 자동 변환
     """
     nodes = graph_json.get("nodes", [])
     edges = graph_json.get("edges", [])
