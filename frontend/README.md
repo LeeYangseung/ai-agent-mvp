@@ -32,7 +32,7 @@ frontend/
 │   ├── main-content.tsx        # 메인 콘텐츠 라우터
 │   │
 │   ├── graph-editor.tsx        # 그래프 에디터 (React Flow 기반)
-│   ├── graph-snippet.tsx       # 그래프 실행 스니핏 (입력/실행/결과)
+│   ├── graph-snippet.tsx       # 미리 정의된 그래프 템플릿 데이터
 │   ├── node.tsx                # 커스텀 노드 컴포넌트
 │   │
 │   ├── agent-management-page.tsx  # Agent 관리 페이지
@@ -155,193 +155,286 @@ switch (currentPage) {
 
 React Flow 기반의 비주얼 그래프 에디터입니다.
 
+**레이아웃 구조:**
+```
+┌─────────────┬──────────────────────┬─────────────┐
+│   Node      │                      │   Chat      │
+│  Sidebar    │     Canvas           │   Panel     │
+│             │   (ReactFlow)        │             │
+│  - Nodes    │                      │  - 메시지     │
+│  - Snippets │                      │  - 실행결과    │
+└─────────────┴──────────────────────┴─────────────┘
+```
+
 **주요 기능:**
-1. **노드 팔레트**: 좌측에 드래그 가능한 노드 목록
-2. **캔버스**: 노드를 배치하고 엣지로 연결
-3. **속성 패널**: 선택된 노드의 설정 편집
+1. **노드 사이드바** (좌측): 클릭하여 추가할 수 있는 노드 버튼 및 템플릿 목록
+2. **캔버스** (중앙): 추가된 노드를 드래그하여 위치 조정 및 엣지로 연결
+3. **노드 설정**: 각 노드 내에서 직접 설정 편집 (프롬프트, 입력, 출력 등)
 4. **그래프 저장/불러오기**: DB에 그래프 저장 및 조회
-5. **스니핏 패널**: 하단에 그래프 실행 UI
+5. **채팅 패널** (우측): 그래프 실행 및 결과 확인 UI
 
 **상태 관리:**
 - `nodes`: React Flow 노드 배열
 - `edges`: React Flow 엣지 배열
-- `selectedNode`: 현재 선택된 노드
-- `graphInfo`: 그래프 메타데이터 (이름, 설명, 버전)
+- `messages`: 채팅 메시지 배열 (사용자 입력 및 AI 응답)
+- `currentGraphData`: 그래프 메타데이터 (이름, 설명, 버전)
+- `isRunning`: 그래프 실행 중 여부
+- `isSaving`: 그래프 저장 중 여부
+
+**서브컴포넌트:**
+
+##### 노드 사이드바 (`NodeSidebar`)
+
+그래프 에디터 좌측의 노드 추가 패널입니다.
+
+**Nodes 섹션:**
+- 📥 Add Input Node: 사용자 입력 받는 노드
+- 💬 Add Prompt Node: LLM 프롬프트 노드
+- 🔍 Add Retrieval Node: 벡터 검색 노드
+- 🔀 Add Condition Node: 조건 분기 노드
+- 🔗 Add Merge Node: 병렬 결과 병합 노드
+- 📤 Add Output Node: 최종 출력 포맷팅 노드
+
+**Snippets 섹션:**
+- 미리 정의된 그래프 템플릿 버튼 목록
+- 클릭 시 현재 그래프를 템플릿으로 교체
+- 자동 레이아웃 적용 (BFS 알고리즘)
 
 **핵심 이벤트 핸들러:**
 
 ##### 노드 추가
 ```tsx
-const onDrop = (event: DragEvent) => {
-  // 드래그된 노드 타입 가져오기
-  const nodeType = event.dataTransfer.getData("application/reactflow")
-  
-  // 캔버스 좌표로 변환
-  const position = screenToFlowPosition({
-    x: event.clientX,
-    y: event.clientY,
-  })
-  
-  // 새 노드 생성
-  const newNode = {
-    id: `${nodeType}_${Date.now()}`,
-    type: "custom",
-    position,
+const onAddNode = () => {
+  // 새 Prompt 노드 생성
+  const newNode: Node = {
+    id: `node-${nodes.length + 1}`,
+    type: "BaseNode",
+    position: { x: 100 + nodes.length * 350, y: 200 },
     data: {
-      label: nodeType,
-      type: nodeType,
-      params: getDefaultParams(nodeType),
+      nodeType: "PromptNode",
+      system_prompt: "",
+      user_prompt: "",
+      assistant_prompt: "",
+      inputs: {},
+      output: "answer",
     },
   }
-  
-  setNodes((nds) => nds.concat(newNode))
+  setNodes((nds) => [...nds, newNode])
 }
+
+// 각 노드 타입별로 별도의 추가 함수 존재
+// onAddInputNode, onAddRetrievalNode, onAddOutputNode, 
+// onAddConditionNode, onAddMergeNode
 ```
 
 ##### 노드 연결
 ```tsx
-const onConnect = (connection: Connection) => {
-  setEdges((eds) => addEdge(connection, eds))
-}
-```
-
-##### 노드 선택
-```tsx
-const onNodeClick = (event: React.MouseEvent, node: Node) => {
-  setSelectedNode(node)
-  // 우측 속성 패널에 노드 정보 표시
-}
+const onConnect = useCallback((params: any) => {
+  // 소스 노드와 타겟 노드 정보 가져오기
+  const sourceNode = nodes.find(n => n.id === params.source)
+  const targetNode = nodes.find(n => n.id === params.target)
+  
+  // ConditionNode의 경우 특별한 Handle 처리
+  if (sourceNode.data.nodeType === "ConditionNode" && params.sourceHandle) {
+    // 조건별 타겟 설정
+    // ...
+  } else {
+    // 일반 노드의 output을 타겟 노드의 inputs에 자동 매핑
+    // ...
+  }
+  
+  // 엣지 추가 (화살표 마커 포함)
+  const newEdge = {
+    ...params,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 15,
+      height: 15,
+      color: '#6b7280',
+    },
+  }
+  setEdges((eds) => addEdge(newEdge, eds))
+}, [setEdges, setNodes, nodes])
 ```
 
 ##### 그래프 저장
 ```tsx
 const handleSaveGraph = async () => {
+  // 이름이 없으면 입력 팝업 표시
+  if (!currentGraphData?.name) {
+    setIsGraphInfoDialogOpen(true)
+    return
+  }
+  
   const graphData = {
-    name: graphInfo.name,
-    description: graphInfo.description,
-    version: graphInfo.version || 1,
-    nodes: nodes.map((node) => ({
-      node_id: node.id,
-      type: node.data.type,
-      params: node.data.params,
-      order: node.position.y, // Y 좌표를 실행 순서로 사용
+    name: currentGraphData.name,
+    description: currentGraphData.description || '',
+    version: currentGraphData.version || 1,
+    nodes: nodes.map((n, index) => ({
+      node_id: n.id,
+      type: n.data.nodeType || "PromptNode",
+      output: n.data.output || "output",
+      position: n.position ? { x: n.position.x, y: n.position.y } : null, // 위치 저장
+      order: index,
+      params: {
+        // 노드 타입별 파라미터 처리
+        ...(n.data.nodeType === "InputNode" ? {} : 
+            n.data.nodeType === "OutputNode" ? {
+              wrap_template: n.data.wrap_template || "",
+              inputs: n.data.inputs || {},
+            } : n.data.nodeType === "PromptNode" ? {
+              system_prompt: n.data.system_prompt || "",
+              user_prompt: n.data.user_prompt || "",
+              assistant_prompt: n.data.assistant_prompt || "",
+              inputs: n.data.inputs || {},
+            } : /* 기타 노드 타입들... */ {})
+      }
     })),
-    edges: edges.map((edge) => ({
-      source: edge.source,
-      target: edge.target,
+    edges: edges.map((e) => ({
+      source: e.source,
+      target: e.target,
     })),
     created_by: "admin",
     updated_by: "admin",
   }
   
-  if (graphInfo.id) {
-    // 기존 그래프 수정
-    await updateGraph(graphInfo.id, graphData)
-  } else {
+  if (isCreateMode || graphId === 'create') {
     // 새 그래프 생성
     await createGraph(graphData)
+  } else if (graphId) {
+    // 기존 그래프 수정
+    await updateGraph(graphId, graphData)
   }
 }
 ```
 
 #### `components/node.tsx`
 
-React Flow 커스텀 노드 컴포넌트입니다.
+React Flow 커스텀 노드 컴포넌트입니다. 각 노드는 자체 편집 기능을 포함합니다.
 
 **노드 타입별 스타일:**
-- **InputNode**: 초록색 배경
-- **PromptNode**: 파란색 배경
-- **RetrievalNode**: 보라색 배경
-- **ConditionNode**: 노란색 배경
-- **MergeNode**: 주황색 배경
-- **OutputNode**: 빨간색 배경
+- **InputNode**: 파란색 배경 (blue-50)
+- **PromptNode**: 흰색 배경
+- **RetrievalNode**: 보라색 배경 (purple-50)
+- **ConditionNode**: 노란색 배경 (yellow-50)
+- **MergeNode**: 주황색 배경 (orange-50)
+- **OutputNode**: 초록색 배경 (green-50)
+
+**주요 기능:**
+- **노드 ID 편집**: ID 클릭하여 수정 가능
+- **노드 삭제**: 우측 상단 삭제 버튼
+- **정보 아이콘**: 노드 타입별 도움말 표시
+- **인라인 편집**: 각 노드 내에서 직접 설정 수정
+- **자동 입력 추출**: 프롬프트 템플릿에서 `{변수}` 자동 감지
 
 **구조:**
 ```tsx
-<div className="node-wrapper">
-  <Handle type="target" position={Position.Top} />
-  
-  <div className="node-header">
-    <NodeIcon />
+<div className={getNodeStyle()}>
+  {/* 헤더 */}
+  <div className="flex justify-between">
     <span>{nodeType}</span>
+    <div>
+      <InfoButton /> {/* 정보 아이콘 */}
+      <DeleteButton /> {/* 삭제 버튼 */}
+    </div>
   </div>
   
-  <div className="node-body">
-    {/* 노드 타입별 파라미터 표시 */}
-  </div>
+  {/* 노드 ID 편집 */}
+  <input value={nodeId} onBlur={commitNodeId} />
   
-  <Handle type="source" position={Position.Bottom} />
+  {/* 노드 타입별 설정 UI */}
+  <NodeTypeSpecificUI />
+  
+  {/* Handle (연결 포인트) */}
+  <Handle type="target" position={Position.Left} />
+  <Handle type="source" position={Position.Right} />
 </div>
 ```
 
 **Handle (연결 포인트):**
-- `target`: 노드 상단, 들어오는 엣지 연결
-- `source`: 노드 하단, 나가는 엣지 연결
+- `target`: 노드 왼쪽, 들어오는 엣지 연결
+- `source`: 노드 오른쪽, 나가는 엣지 연결
+- **ConditionNode**: 각 조건마다 별도의 source handle 생성
 
 #### `components/graph-snippet.tsx`
 
-그래프 실행 및 결과 확인 패널입니다.
+미리 정의된 그래프 템플릿(스니펫)을 제공하는 파일입니다.
+
+**제공하는 스니펫:**
+1. **기본 검색 그래프**: InputNode → PromptNode → RetrievalNode → PromptNode → OutputNode
+2. **병렬 분기 + 병합 테스트**: ConditionNode와 MergeNode를 활용한 병렬 처리 예시
+3. **Condition 테스트 (Parallel)**: 조건 기반 병렬 실행 예시
+4. **단순 대화형 봇**: 기본 대화 처리 그래프
+
+**사용 방법:**
+- 그래프 에디터 좌측 사이드바의 "Snippets" 섹션에서 선택
+- 클릭 시 현재 그래프를 템플릿으로 교체
+- 자동 레이아웃 적용 (BFS 알고리즘)
+
+#### 채팅 패널 (`ChatPanel` in `graph-editor.tsx`)
+
+우측의 채팅 형식 실행 및 결과 확인 패널입니다.
 
 **주요 기능:**
-1. **입력 탭**: 그래프에 전달할 입력값 입력 (JSON 형태)
-2. **실행 버튼**: 현재 그래프를 Backend에 전송하여 실행
-3. **결과 탭**: 
-   - **Node Results**: 각 노드의 입출력 및 실행 시간
-   - **Final State**: 최종 상태 딕셔너리
-   - **Execution History**: 실행 순서 및 타임라인
+1. **메시지 입력**: 하단에 사용자 메시지 입력
+2. **실행**: 메시지 전송 시 자동으로 그래프 실행
+3. **대화 형식 결과**: 
+   - 사용자 메시지와 AI 답변을 채팅 형식으로 표시
+   - Markdown 렌더링 지원
+4. **확장 패널**:
+   - **노드별 입출력**: 각 노드의 입력/출력 상세 정보
+   - **그래프 히스토리**: 실행 타임라인
+   - **그래프 스테이트**: 전체 실행 결과 JSON
 
 **실행 프로세스:**
 ```tsx
-const handleRunGraph = async () => {
-  // 입력값 파싱
-  const inputData = JSON.parse(inputValue)
+const onSendMessage = async (userInput: string) => {
+  // 메시지 추가
+  setMessages((msgs) => [...msgs, { 
+    role: "user", 
+    content: userInput,
+    timestamp: new Date()
+  }])
+  
+  setIsRunning(true)
+  
+  // input_state 구성 (InputNode의 출력 키에 맞춰)
+  const inputState = { input: userInput }
   
   // 그래프 데이터 구성
-  const graphData = {
-    nodes: nodes.map((node) => ({
-      id: node.id,
-      type: node.data.type,
-      params: node.data.params,
+  const graph = {
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      type: n.data.nodeType || "PromptNode",
+      output: n.data.output || "output",
+      params: { /* 노드별 파라미터 */ }
     })),
-    edges: edges.map((edge) => ({
-      source: edge.source,
-      target: edge.target,
+    edges: edges.map((e) => ({
+      source: e.source,
+      target: e.target,
     })),
-    input: inputData,
+    input_state: inputState,
   }
   
   // Backend API 호출
-  const result = await runGraph(graphData)
+  const res = await runGraph(graph)
   
-  // 결과 표시
-  setResults(result)
+  // 결과를 Agent 메시지로 추가
+  setMessages((msgs) => [...msgs, { 
+    role: "agent", 
+    content: JSON.stringify(res.results, null, 2),
+    timestamp: new Date()
+  }])
+  
+  setIsRunning(false)
 }
 ```
 
 **결과 표시 예시:**
-```tsx
-<Tabs>
-  <TabsList>
-    <TabsTrigger value="node_results">Node Results</TabsTrigger>
-    <TabsTrigger value="final_state">Final State</TabsTrigger>
-    <TabsTrigger value="history">Execution History</TabsTrigger>
-  </TabsList>
-  
-  <TabsContent value="node_results">
-    {results.nodes.map((nodeResult) => (
-      <Card>
-        <h3>{nodeResult.node_id}</h3>
-        <p>실행 시간: {nodeResult.execution_time}s</p>
-        <pre>{JSON.stringify(nodeResult.output, null, 2)}</pre>
-      </Card>
-    ))}
-  </TabsContent>
-  
-  <TabsContent value="final_state">
-    <pre>{JSON.stringify(results.final_state, null, 2)}</pre>
-  </TabsContent>
-</Tabs>
-```
+- **AI 답변**: OutputNode의 agent_output을 Markdown으로 렌더링
+- **노드별 입출력**: 각 노드의 status, inputs, outputs, error_message 표시
+- **히스토리**: 그래프 실행 시작/완료 타임라인
+- **스테이트**: 전체 structured_results와 execution_info를 JSON으로 표시
 
 ---
 
@@ -412,155 +505,113 @@ const handleEdit = async (graphId: string) => {
 
 #### `components/knowledge-management-page.tsx`
 
-문서 및 컬렉션을 관리하는 페이지입니다.
+문서를 관리하는 메인 페이지입니다.
 
 **주요 기능:**
-1. **탭 구조**:
-   - **문서 탭**: 문서 목록/업로드/상세/삭제
-   - **컬렉션 탭**: 컬렉션 목록/생성/수정/삭제
 
-2. **문서 목록**:
-   - 테이블 형태로 문서 표시 (이름, 컬렉션, 상태, 생성일)
-   - 필터: 컬렉션별, 상태별
-   - 정렬: 이름/생성일/수정일
-   - 페이지네이션
+1. **검색 및 필터링**:
+   - 컬렉션별 필터 (드롭다운 선택)
+   - 문서명 검색
+   - 문서 ID, 청킹 ID, 청킹 내용, 경로 검색
+   - 상태별 필터 (pending/indexed/deleted)
+   - 초기화 버튼
 
-3. **문서 업로드**:
-   - 파일 선택 (PDF, TXT)
-   - 컬렉션 선택 (드롭다운)
-   - 청킹 방법 선택:
-     - **Length**: 청킹 사이즈, 오버랩 사이즈 입력
-     - **Semantic**: 임계값 유형 선택
-     - **Hybrid**: 청킹 사이즈 + 임계값 유형
-     - **Paragraph**: 추가 설정 없음
-   - "업로드" 버튼
+2. **문서 목록 테이블**:
+   - 컬럼: 컬렉션, 문서명, 청킹 사이즈, 오버랩 사이즈, 청킹 방법, 상태, 작업
+   - 정렬: 각 컬럼 클릭으로 오름차순/내림차순 정렬
+   - 더블클릭: 문서 상세 페이지로 이동
+   - 삭제 버튼: 확인 다이얼로그 후 삭제
 
-4. **문서 상세**:
-   - 문서 메타데이터 표시
-   - 모든 청크 목록 표시 (인덱스, 내용)
+3. **페이지네이션**:
+   - 페이지 번호 선택
+   - 이전/다음 페이지 이동
+   - 페이지당 항목 수 선택 (10/20/50)
+   - 전체 항목 수 및 현재 페이지 정보 표시
 
-5. **컬렉션 관리**:
-   - 컬렉션 생성 다이얼로그
-   - 컬렉션 수정 다이얼로그
-   - 컬렉션 삭제 (문서가 없을 때만 가능)
+4. **문서 생성 버튼**:
+   - "문서 생성" 버튼 클릭 시 문서 생성 페이지로 이동
 
-**문서 업로드 폼:**
-```tsx
-<Dialog>
-  <DialogTrigger asChild>
-    <Button>문서 업로드</Button>
-  </DialogTrigger>
-  
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>문서 업로드</DialogTitle>
-    </DialogHeader>
-    
-    <form onSubmit={handleUpload}>
-      {/* 파일 선택 */}
-      <Input type="file" accept=".pdf,.txt" onChange={handleFileChange} />
-      
-      {/* 컬렉션 선택 */}
-      <Select value={collectionId} onValueChange={setCollectionId}>
-        {collections.map((col) => (
-          <SelectItem key={col.id} value={col.id}>
-            {col.name}
-          </SelectItem>
-        ))}
-      </Select>
-      
-      {/* 청킹 방법 선택 */}
-      <Select value={chunkingMethod} onValueChange={setChunkingMethod}>
-        <SelectItem value="length">Length (길이 기반)</SelectItem>
-        <SelectItem value="semantic">Semantic (의미 기반)</SelectItem>
-        <SelectItem value="hybrid">Hybrid (하이브리드)</SelectItem>
-        <SelectItem value="paragraph">Paragraph (문단 기반)</SelectItem>
-      </Select>
-      
-      {/* 청킹 방법별 설정 */}
-      {chunkingMethod === "length" && (
-        <>
-          <Input 
-            type="number" 
-            placeholder="청킹 사이즈" 
-            value={chunkSize} 
-            onChange={(e) => setChunkSize(e.target.value)} 
-          />
-          <Input 
-            type="number" 
-            placeholder="오버랩 사이즈" 
-            value={overlapSize} 
-            onChange={(e) => setOverlapSize(e.target.value)} 
-          />
-        </>
-      )}
-      
-      {(chunkingMethod === "semantic" || chunkingMethod === "hybrid") && (
-        <Select value={thresholdType} onValueChange={setThresholdType}>
-          <SelectItem value="percentile">Percentile (백분위수)</SelectItem>
-          <SelectItem value="standard_deviation">Standard Deviation (표준편차)</SelectItem>
-          <SelectItem value="interquartile">Interquartile (사분위수)</SelectItem>
-        </Select>
-      )}
-      
-      <Button type="submit">업로드</Button>
-    </form>
-  </DialogContent>
-</Dialog>
-```
-
-**문서 업로드 처리:**
-```tsx
-const handleUpload = async (e: React.FormEvent) => {
-  e.preventDefault()
-  
-  // FormData 생성
-  const formData = new FormData()
-  formData.append("file", selectedFile)
-  formData.append("collection_id", collectionId)
-  formData.append("method", chunkingMethod)
-  formData.append("created_by", "admin")
-  formData.append("updated_by", "admin")
-  
-  // 청킹 방법별 파라미터 추가
-  if (chunkingMethod === "length" || chunkingMethod === "hybrid") {
-    formData.append("chunk_size", chunkSize)
-    formData.append("overlap_size", overlapSize)
-  }
-  
-  if (chunkingMethod === "semantic" || chunkingMethod === "hybrid") {
-    formData.append("breakpoint_threshold_type", thresholdType)
-  }
-  
-  // Backend API 호출
-  await createDocument(formData)
-  
-  // 문서 목록 새로고침
-  fetchDocuments()
-}
-```
+**상태 관리:**
+- `documents`: 문서 목록
+- `collections`: 컬렉션 목록 (필터용)
+- `filters`: 검색/필터 조건
+- `sortField`, `sortDirection`: 정렬 기준
+- `currentPage`, `totalCount`: 페이지네이션 정보
+- `selectedDocumentId`: 선택된 문서 ID (상세 페이지 이동 시)
 
 #### `components/document-detail-page.tsx`
 
-문서 상세 정보와 청크 목록을 표시하는 페이지입니다.
+문서 상세/수정 및 문서 생성을 처리하는 페이지입니다.
 
-**표시 정보:**
-- 문서 이름, 경로, 상태
-- 컬렉션 정보
-- 청킹 방법 및 설정값
-- 생성/수정 시간
-- 청크 목록 (테이블 형태)
-  - 청크 인덱스
-  - 청크 내용 (접기/펼치기 가능)
-  - 생성 시간
+**두 가지 모드:**
+
+##### 1. 문서 상세/수정 모드
+문서 더블클릭 시 진입하며, 다음 정보를 표시합니다:
+- 문서명 (편집 가능)
+- 컬렉션 정보 (Badge 표시)
+- 경로, 상태
+- 청킹 방법, 청킹 사이즈, 오버랩 사이즈
+- 임계값 유형 (semantic/hybrid인 경우)
+- 생성자, 생성일, 수정일
+- **청크 목록**: 스크롤 가능한 카드 형태로 각 청크의 인덱스, 내용, 생성일 표시
+
+##### 2. 문서 생성 모드
+"문서 생성" 버튼 클릭 시 진입하며, 다음 폼을 제공합니다:
+
+**컬렉션 선택:**
+- 읽기 전용 입력 필드
+- 돋보기 버튼 (🔍): 클릭 시 `CollectionManagerDialog` 열림
+- 이 다이얼로그에서 컬렉션 선택 또는 새로 생성 가능
+
+**문서명:**
+- 텍스트 입력 (최대 1000자)
+- 실시간 글자 수 표시
+
+**청킹 방법 선택:**
+- Length (길이 기반)
+- Semantic (의미 기반)
+- Hybrid (하이브리드)
+- Paragraph (문단 기반)
+
+**청킹 방법별 설정:**
+- **Length**: 청킹 사이즈, 오버랩 사이즈 입력
+- **Semantic**: 임계값 유형 선택 (percentile/standard_deviation/interquartile)
+- **Hybrid**: 청킹 사이즈 + 오버랩 사이즈 + 임계값 유형
+- **Paragraph**: 추가 설정 없음
+
+**파일 업로드:**
+- 파일 선택 버튼 (PDF, TXT 지원)
+- 선택된 파일명 표시
+
+**유효성 검사:**
+- 컬렉션, 문서명, 파일 필수
+- 청킹 방법별 필수값 검증
+- 오버랩 사이즈는 청킹 사이즈보다 작아야 함
+
+**상태 관리:**
+- `document`: 문서 상세 데이터
+- `collectionId`, `collectionName`: 선택된 컬렉션 정보
+- `method`, `chunkSize`, `overlapSize`, `breakpointThresholdType`: 청킹 설정
+- `uploadedFile`: 업로드할 파일
+- `isCollectionDialogOpen`: 컬렉션 관리 다이얼로그 표시 여부
 
 #### `components/collection-manager-dialog.tsx`
 
-컬렉션 생성/수정 다이얼로그입니다.
+컬렉션을 선택하거나 새로 생성하는 다이얼로그입니다.
+
+**주요 기능:**
+- 컬렉션 목록 표시 (테이블 형태)
+- 컬렉션 선택 (라디오 버튼)
+- 컬렉션 생성: 이름과 설명 입력
+- 컬렉션 수정: 기존 컬렉션의 이름과 설명 수정
+- 컬렉션 삭제: 문서가 없는 컬렉션만 삭제 가능
 
 **폼 필드:**
 - 컬렉션 이름 (필수)
 - 설명 (선택)
+
+**사용 위치:**
+- 문서 생성 페이지의 컬렉션 선택 돋보기 버튼 클릭 시
 
 ---
 
@@ -974,23 +1025,20 @@ console.log('그래프 실행 결과:', result)
 ## 🛣️ 향후 개선 사항
 
 ### v1.1
+- [ ] 사이드바에서 캔버스로 드래그 앤 드롭하여 노드 추가 기능
 - [ ] 그래프 에디터 실행 취소/다시 실행 (Undo/Redo)
 - [ ] 노드 그룹화 기능
 - [ ] 그래프 확대/축소/중앙 정렬 툴바
-- [ ] 그래프 미니맵
 
 ### v1.2
-- [ ] 다크모드 개선
-- [ ] 모바일 반응형 최적화
 - [ ] 그래프 실행 실시간 스트리밍
 - [ ] 문서 업로드 진행 상태 표시
-- [ ] 드래그 앤 드롭 파일 업로드
+- [ ] 문서 업로드 시 드래그 앤 드롭 지원
 
 ### v2.0
 - [ ] 사용자 인증 및 권한 관리 UI
 - [ ] 그래프 템플릿 마켓플레이스
-- [ ] 노드 실행 결과 시각화 (차트, 그래프)
-- [ ] 실시간 협업 기능 (WebSocket)
+- [ ] 노드 실행 결과 시각화 (차트, 그래프)\
 
 ---
 

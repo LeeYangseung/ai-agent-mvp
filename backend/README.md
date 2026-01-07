@@ -168,37 +168,48 @@ backend/
 {
   "nodes": [
     {
-      "id": "input",
+      "id": "input-1",
       "type": "InputNode",
-      "params": {
-        "input_key": "question"
-      }
+      "output": "user_input",
+      "params": {}
     },
     {
-      "id": "prompt",
+      "id": "prompt-1",
       "type": "PromptNode",
+      "output": "answer",
       "params": {
         "system_prompt": "당신은 도움이 되는 AI 비서입니다.",
-        "user_prompt": "{question}",
-        "model": "gpt-4o-mini",
-        "temperature": 0.7,
-        "output_key": "answer"
+        "user_prompt": "{user_input}",
+        "assistant_prompt": "",
+        "inputs": {
+          "user_input": {
+            "type": "reference",
+            "value": "input-1_user_input"
+          }
+        }
       }
     },
     {
-      "id": "output",
+      "id": "output-1",
       "type": "OutputNode",
+      "output": "agent_output",
       "params": {
-        "output_key": "answer"
+        "wrap_template": "🤖 AI 답변:\n\n{answer}",
+        "inputs": {
+          "answer": {
+            "type": "reference",
+            "value": "prompt-1_answer"
+          }
+        }
       }
     }
   ],
   "edges": [
-    {"source": "input", "target": "prompt"},
-    {"source": "prompt", "target": "output"}
+    {"source": "input-1", "target": "prompt-1"},
+    {"source": "prompt-1", "target": "output-1"}
   ],
-  "input": {
-    "question": "안녕하세요. 오늘 날씨가 어떤가요?"
+  "input_state": {
+    "input": "안녕하세요. 오늘 날씨가 어떤가요?"
   }
 }
 ```
@@ -206,36 +217,48 @@ backend/
 **Response:**
 ```json
 {
-  "results": {
-    "nodes": [
-      {
-        "node_id": "input",
-        "type": "InputNode",
-        "input": {"question": "안녕하세요. 오늘 날씨가 어떤가요?"},
-        "output": {"question": "안녕하세요. 오늘 날씨가 어떤가요?"},
-        "execution_time": 0.001
+  "results": [
+    {
+      "node_id": "input-1",
+      "type": "InputNode",
+      "status": "success",
+      "inputs": {},
+      "outputs": {
+        "user_input": "안녕하세요. 오늘 날씨가 어떤가요?"
       },
-      {
-        "node_id": "prompt",
-        "type": "PromptNode",
-        "input": {"question": "안녕하세요. 오늘 날씨가 어떤가요?"},
-        "output": {"answer": "죄송하지만 저는 실시간 날씨 정보에 접근할 수 없습니다..."},
-        "execution_time": 1.234
+      "error_message": null
+    },
+    {
+      "node_id": "prompt-1",
+      "type": "PromptNode",
+      "status": "success",
+      "inputs": {
+        "user_input": "안녕하세요. 오늘 날씨가 어떤가요?"
       },
-      {
-        "node_id": "output",
-        "type": "OutputNode",
-        "input": {"answer": "죄송하지만..."},
-        "output": "죄송하지만 저는 실시간 날씨 정보에 접근할 수 없습니다...",
-        "execution_time": 0.001
-      }
-    ],
-    "execution_order": ["input", "prompt", "output"],
-    "total_time": 1.236
-  },
+      "outputs": {
+        "answer": "죄송하지만 저는 실시간 날씨 정보에 접근할 수 없습니다..."
+      },
+      "error_message": null
+    },
+    {
+      "node_id": "output-1",
+      "type": "OutputNode",
+      "status": "success",
+      "inputs": {
+        "answer": "죄송하지만..."
+      },
+      "outputs": {
+        "agent_output": "🤖 AI 답변:\n\n죄송하지만 저는 실시간 날씨 정보에 접근할 수 없습니다..."
+      },
+      "error_message": null
+    }
+  ],
   "final_state": {
-    "question": "안녕하세요. 오늘 날씨가 어떤가요?",
-    "answer": "죄송하지만 저는 실시간 날씨 정보에 접근할 수 없습니다..."
+    "input": "안녕하세요. 오늘 날씨가 어떤가요?",
+    "graph_status": "success",
+    "input-1_user_input": "안녕하세요. 오늘 날씨가 어떤가요?",
+    "prompt-1_answer": "죄송하지만 저는 실시간 날씨 정보에 접근할 수 없습니다...",
+    "output-1_agent_output": "🤖 AI 답변:\n\n죄송하지만..."
   }
 }
 ```
@@ -299,19 +322,26 @@ backend/
     "nodes": [
       {
         "id": "uuid-node-1",
-        "node_id": "input",
+        "node_id": "input-1",
         "type": "InputNode",
-        "params": {"input_key": "question"},
+        "output": "user_input",
+        "params": {},
         "order": 1
       },
       {
         "id": "uuid-node-2",
-        "node_id": "retrieval",
+        "node_id": "retrieval-1",
         "type": "RetrievalNode",
+        "output": "context",
         "params": {
-          "collection_name": "company_policies",
-          "query_key": "question",
-          "top_k": 3
+          "collection": "company_policies",
+          "top_k": 3,
+          "inputs": {
+            "query": {
+              "type": "reference",
+              "value": "input-1_user_input"
+            }
+          }
         },
         "order": 2
       }
@@ -319,8 +349,8 @@ backend/
     "edges": [
       {
         "id": "uuid-edge-1",
-        "source": "input",
-        "target": "retrieval"
+        "source": "input-1",
+        "target": "retrieval-1"
       }
     ],
     "created_by": "admin",
@@ -347,16 +377,32 @@ backend/
   "updated_by": "admin",
   "nodes": [
     {
-      "node_id": "input",
+      "node_id": "input-1",
       "type": "InputNode",
-      "params": {"input_key": "question"},
+      "output": "user_input",
+      "params": {},
       "order": 1
+    },
+    {
+      "node_id": "output-1",
+      "type": "OutputNode",
+      "output": "agent_output",
+      "params": {
+        "wrap_template": "{answer}",
+        "inputs": {
+          "answer": {
+            "type": "reference",
+            "value": "input-1_user_input"
+          }
+        }
+      },
+      "order": 2
     }
   ],
   "edges": [
     {
-      "source": "input",
-      "target": "output"
+      "source": "input-1",
+      "target": "output-1"
     }
   ]
 }
@@ -745,63 +791,105 @@ PostgreSQL 및 ChromaDB에서 문서와 모든 청크를 삭제합니다.
 **Returns:**
 ```python
 {
-    "structured_results": {
-        "nodes": [
-            {
-                "node_id": "input",
-                "type": "InputNode",
-                "input": {...},
-                "output": {...},
-                "execution_time": 0.001
-            },
-            ...
-        ],
-        "execution_order": ["input", "retrieval", "prompt", "output"],
-        "total_time": 2.345
-    },
+    "structured_results": [
+        {
+            "node_id": "input-1",
+            "type": "InputNode",
+            "status": "success",
+            "inputs": {},
+            "outputs": {"user_input": "..."},
+            "error_message": null
+        },
+        {
+            "node_id": "retrieval-1",
+            "type": "RetrievalNode",
+            "status": "success",
+            "inputs": {"query": "..."},
+            "outputs": {"context": ["...", "..."]},
+            "error_message": null
+        },
+        ...
+    ],
     "final_state": {
-        "question": "...",
-        "context": "...",
-        "answer": "..."
+        "input": "...",
+        "graph_status": "success",
+        "input-1_user_input": "...",
+        "retrieval-1_context": ["...", "..."],
+        "prompt-1_answer": "...",
+        "output-1_agent_output": "..."
     }
 }
 ```
 
 ### State 관리
 
-LangGraph의 상태(State)는 전체 그래프 실행 과정에서 공유되는 딕셔너리입니다:
+LangGraph의 상태(State)는 전체 그래프 실행 과정에서 공유되는 딕셔너리입니다.
 
-- **초기화**: InputNode가 input 값을 state에 추가
-- **누적**: 각 노드가 state를 읽고 새로운 키-값을 추가
+**키 명명 규칙:**
+- 각 노드의 출력은 `{node_id}_{output_key}` 형식으로 저장됩니다
+- 이를 통해 동일한 output 키를 사용하는 여러 노드의 결과를 구분할 수 있습니다
+- 예: `input-1_user_input`, `prompt-1_answer`, `retrieval-1_context`
+
+**State 변화 과정:**
+- **초기화**: `input_state`의 값들이 state에 추가 (예: `input`)
+- **누적**: 각 노드가 `{node_id}_{output}` 형식으로 새로운 키-값 추가
 - **전달**: 엣지를 따라 다음 노드로 전달
 - **최종**: OutputNode에서 최종 결과 추출
 
-**예시:**
+**실제 실행 예시:**
 ```python
-# 초기 state (InputNode 실행 후)
+# 초기 state (input_state 적용 후)
+# input_state = {"input": "해지환급금"}
 {
-    "question": "회사 정책은?"
+    "input": "해지환급금",
+    "graph_status": "success"
 }
 
-# RetrievalNode 실행 후
+# InputNode (id: "input-1") 실행 후
 {
-    "question": "회사 정책은?",
-    "context": "제1조 목적...\n제2조 적용 범위..."
+    "input": "해지환급금",
+    "graph_status": "success",
+    "input-1_user_input": "해지환급금"
 }
 
-# PromptNode 실행 후
+# RetrievalNode (id: "retrieval-1") 실행 후
 {
-    "question": "회사 정책은?",
-    "context": "제1조 목적...",
-    "answer": "회사 정책에 따르면..."
+    "input": "해지환급금",
+    "graph_status": "success",
+    "input-1_user_input": "해지환급금",
+    "retrieval-1_context": ["보험가격지수...", "해약환급금에 관한..."]
 }
 
-# OutputNode 실행 후 (최종 state)
+# PromptNode (id: "prompt-1") 실행 후
 {
-    "question": "회사 정책은?",
-    "context": "제1조 목적...",
-    "answer": "회사 정책에 따르면...",
-    "output": "회사 정책에 따르면..."
+    "input": "해지환급금",
+    "graph_status": "success",
+    "input-1_user_input": "해지환급금",
+    "retrieval-1_context": ["보험가격지수...", "해약환급금에 관한..."],
+    "prompt-1_answer": "해지환급금은 보험 계약을 해지할 때..."
+}
+
+# OutputNode (id: "output-1") 실행 후 (최종 state)
+{
+    "input": "해지환급금",
+    "graph_status": "success",
+    "input-1_user_input": "해지환급금",
+    "retrieval-1_context": ["보험가격지수...", "해약환급금에 관한..."],
+    "prompt-1_answer": "해지환급금은 보험 계약을 해지할 때...",
+    "output-1_agent_output": "🤖 AI 답변:\n\n해지환급금은 보험 계약을..."
+}
+```
+
+**노드 간 참조:**
+다른 노드의 출력을 참조할 때는 `{node_id}_{output_key}` 형식을 사용합니다:
+```json
+{
+  "inputs": {
+    "answer": {
+      "type": "reference",
+      "value": "prompt-1_answer"
+    }
+  }
 }
 ```
 
@@ -841,18 +929,21 @@ class BaseNode(ABC):
 
 #### 1. InputNode
 
-**역할**: 워크플로우 시작점, 초기 입력값을 state에 설정
+**역할**: 워크플로우 시작점, `input_state`의 입력값을 state에 설정
 
 **파라미터:**
-- `input_key` (str, default="input"): 입력값이 저장될 state 키
+- 없음 (파라미터 불필요)
+
+**Output:**
+- `user_input` (고정값): 입력값이 항상 이 키로 저장됨
 
 **구현 위치**: `app/nodes/input_node.py`
 
 **실행 예시:**
 ```python
-# params = {"input_key": "question"}
-# input = {"question": "안녕하세요"}
-# 실행 후 state = {"question": "안녕하세요"}
+# 노드 ID: "input-1"
+# input_state = {"input": "안녕하세요"}
+# 실행 후 state["input-1_user_input"] = "안녕하세요"
 ```
 
 #### 2. PromptNode
@@ -862,25 +953,36 @@ class BaseNode(ABC):
 **파라미터:**
 - `system_prompt` (str): 시스템 프롬프트 (템플릿 지원)
 - `user_prompt` (str): 사용자 프롬프트 (템플릿 지원)
-- `model` (str, default="gpt-4o-mini"): 사용할 LLM 모델
-- `temperature` (float, default=0.7): 생성 다양성
-- `output_key` (str, default="output"): 응답이 저장될 state 키
+- `assistant_prompt` (str, optional): 어시스턴트 프롬프트 (Few-shot learning용)
+- `inputs` (dict): 프롬프트에 사용할 변수들
+  - 각 입력은 `{"type": "reference", "value": "node-id_output-key"}` 또는 `{"type": "fixed", "value": "고정값"}` 형식
 
-**템플릿 변수**: `{variable_name}` 형식으로 state 값 참조
+**Output:**
+- 노드 레벨의 `output` 필드에 지정된 키로 저장됨
+
+**템플릿 변수**: `{variable_name}` 형식으로 inputs의 변수 참조
 
 **구현 위치**: `app/nodes/prompt_node.py`
 
 **실행 예시:**
 ```python
-# state = {"question": "파이썬이란?", "context": "파이썬은 프로그래밍 언어입니다."}
-# params = {
-#     "system_prompt": "당신은 전문가입니다.",
-#     "user_prompt": "질문: {question}\n컨텍스트: {context}",
-#     "model": "gpt-4o-mini",
-#     "temperature": 0.3,
-#     "output_key": "answer"
+# 노드 정의:
+# {
+#     "id": "prompt-1",
+#     "type": "PromptNode",
+#     "output": "answer",
+#     "params": {
+#         "system_prompt": "당신은 전문가입니다.",
+#         "user_prompt": "질문: {question}\n컨텍스트: {context}",
+#         "assistant_prompt": "",
+#         "inputs": {
+#             "question": {"type": "reference", "value": "input-1_user_input"},
+#             "context": {"type": "reference", "value": "retrieval-1_context"}
+#         }
+#     }
 # }
-# 실행 후 state["answer"] = "파이썬은 고수준 프로그래밍 언어로..."
+#
+# 실행 후 state["prompt-1_answer"] = "파이썬은 고수준 프로그래밍 언어로..."
 ```
 
 #### 3. RetrievalNode
@@ -888,87 +990,167 @@ class BaseNode(ABC):
 **역할**: ChromaDB 벡터 검색
 
 **파라미터:**
-- `collection_name` (str, 필수): 검색할 컬렉션 이름
-- `query_key` (str, default="input"): 검색 질의가 있는 state 키
-- `output_key` (str, default="context"): 검색 결과가 저장될 state 키
-- `top_k` (int, default=5): 반환할 최대 문서 개수
+- `collection` (str, optional): 검색할 컬렉션 이름 (지정하지 않으면 전체 검색)
+- `top_k` (int, default=4): 반환할 최대 문서 개수
+- `inputs` (dict): 검색에 사용할 변수들
+  - 보통 `query` 키에 검색 질의 참조
+
+**Output:**
+- 노드 레벨의 `output` 필드에 지정된 키로 저장됨 (보통 `context`)
 
 **구현 위치**: `app/nodes/retrieval_node.py`
 
 **실행 예시:**
 ```python
-# state = {"question": "연차 휴가는?"}
-# params = {
-#     "collection_name": "company_policies",
-#     "query_key": "question",
-#     "output_key": "context",
-#     "top_k": 3
+# 노드 정의:
+# {
+#     "id": "retrieval-1",
+#     "type": "RetrievalNode",
+#     "output": "context",
+#     "params": {
+#         "collection": "company_policies",
+#         "top_k": 3,
+#         "inputs": {
+#             "query": {"type": "reference", "value": "input-1_user_input"}
+#         }
+#     }
 # }
-# 실행 후 state["context"] = "제10조 연차 휴가...\n제11조..."
+#
+# 실행 후 state["retrieval-1_context"] = ["제10조 연차 휴가...", "제11조..."]
 ```
 
 #### 4. ConditionNode
 
-**역할**: 조건에 따라 다음 실행 경로 결정
+**역할**: 조건에 따라 다음 실행 경로 결정 (단일 또는 병렬 분기)
 
 **파라미터:**
-- `condition_type` (enum): 조건 유형
-  - `equals`: 값이 같은지
-  - `contains`: 문자열 포함 여부
-  - `greater_than`: 숫자 크기 비교 (>)
-  - `less_than`: 숫자 크기 비교 (<)
-  - `exists`: 키 존재 여부
-- `check_key` (str): 검사할 state 키
-- `condition_value` (Any): 비교 기준값
-- `true_next` (str): 조건 참일 때 다음 노드 ID
-- `false_next` (str): 조건 거짓일 때 다음 노드 ID
+- `inputs` (dict): 조건 평가에 사용할 변수들
+- `conditions` (list): 조건 목록
+  - `variable` (str): 평가할 변수명 (inputs의 키)
+  - `operator` (str): 비교 연산자 (`==`, `!=`, `<>`, `>`, `>=`, `<`, `<=`, `contains`, `not_contains`, `starts_with`, `ends_with`)
+  - `value` (str): 비교 대상 값
+  - `target` (str): 조건 만족 시 이동할 노드 ID
+- `default_target` (str): 모든 조건 불만족 시 이동할 노드 ID (ELSE)
+- `evaluation_mode` (str): 평가 모드
+  - `first_match` (기본값): 첫 번째 만족 조건만 실행
+  - `all_matches`: 모든 만족 조건을 병렬로 실행 (fan-out)
+
+**Output:**
+- 노드 레벨의 `output` 필드에 지정된 키로 조건 평가 결과 저장
 
 **구현 위치**: `app/nodes/condition_node.py`
 
-**실행 예시:**
+**실행 예시 (First Match):**
 ```python
-# state = {"score": 85}
-# params = {
-#     "condition_type": "greater_than",
-#     "check_key": "score",
-#     "condition_value": 80,
-#     "true_next": "high_score_handler",
-#     "false_next": "low_score_handler"
+# 노드 정의:
+# {
+#     "id": "condition-1",
+#     "type": "ConditionNode",
+#     "output": "condition_result",
+#     "params": {
+#         "evaluation_mode": "first_match",
+#         "inputs": {
+#             "answer": {"type": "reference", "value": "prompt-1_answer"}
+#         },
+#         "conditions": [
+#             {
+#                 "variable": "answer",
+#                 "operator": "contains",
+#                 "value": "긍정적",
+#                 "target": "positive-node"
+#             },
+#             {
+#                 "variable": "answer",
+#                 "operator": "contains",
+#                 "value": "부정적",
+#                 "target": "negative-node"
+#             }
+#         ],
+#         "default_target": "neutral-node"
+#     }
 # }
-# 실행 후 다음 노드는 "high_score_handler"
+#
+# 첫 번째 조건 만족 시 "positive-node"로 이동
+# state["condition-1_condition_result"]에 평가 결과 저장
+```
+
+**실행 예시 (All Matches - 병렬 실행):**
+```python
+# evaluation_mode: "all_matches"로 설정 시
+# 여러 조건이 동시에 만족되면 모든 타겟 노드가 병렬로 실행됨
+# 예: "긍정적"과 "감사" 모두 포함 → 두 개의 브랜치 동시 실행
 ```
 
 #### 5. MergeNode
 
-**역할**: 여러 병렬 경로의 state를 하나로 병합
+**역할**: 여러 병렬 브랜치의 결과를 하나로 병합 (fan-in)
 
 **파라미터:**
-- `merge_strategy` (enum, default="merge"): 병합 전략
-  - `merge`: 딕셔너리 병합 (중복 키는 나중 값으로 덮어씀)
-  - `replace`: 첫 번째 state만 사용
-  - `append`: 리스트 값을 이어붙임
-- `merge_keys` (list, optional): 병합할 키 목록 (지정하지 않으면 모든 키)
+- `inputs` (dict): 병합할 입력 변수들
+  - 예: `{"result1": {"type": "reference", "value": "node-3_output"}, "result2": {...}}`
+- `merge_strategy` (str, default="concat"): 병합 전략
+  - `concat`: 문자열 연결 (기본값)
+  - `list`: 리스트로 수집
+  - `dict`: 딕셔너리로 수집 (키 이름 유지)
+- `separator` (str, default="\n\n---\n\n"): concat 모드에서 사용할 구분자
+
+**Output:**
+- 노드 레벨의 `output` 필드에 지정된 키로 병합 결과 저장
 
 **구현 위치**: `app/nodes/merge_node.py`
+
+**실행 예시:**
+```python
+# 노드 정의:
+# {
+#     "id": "merge-1",
+#     "type": "MergeNode",
+#     "output": "merged_output",
+#     "params": {
+#         "merge_strategy": "concat",
+#         "separator": "\n\n--- 다음 분기 ---\n\n",
+#         "inputs": {
+#             "branch1": {"type": "reference", "value": "node-3_branch1_result"},
+#             "branch2": {"type": "reference", "value": "node-4_branch2_result"}
+#         }
+#     }
+# }
+#
+# 실행 후 state["merge-1_merged_output"] = "결과1\n\n--- 다음 분기 ---\n\n결과2"
+```
 
 #### 6. OutputNode
 
 **역할**: 최종 결과 포맷팅 및 워크플로우 종료
 
 **파라미터:**
-- `output_key` (str, default="output"): 최종 출력으로 사용할 state 키
-- `format` (enum, default="text"): 출력 포맷
-  - `text`: 텍스트 그대로
-  - `json`: JSON 직렬화
-  - `markdown`: Markdown 포맷
+- `wrap_template` (str, optional): 출력 포맷 템플릿
+  - `{variable_name}` 형식으로 inputs의 변수 참조
+  - 지정하지 않으면 첫 번째 input 값을 그대로 사용
+- `inputs` (dict): 템플릿에 사용할 변수들
+
+**Output:**
+- 항상 `agent_output`으로 고정됨 (최종 출력 키)
 
 **구현 위치**: `app/nodes/output_node.py`
 
 **실행 예시:**
 ```python
-# state = {"answer": "결과 텍스트"}
-# params = {"output_key": "answer", "format": "text"}
-# 실행 후 state["output"] = "결과 텍스트"
+# 노드 정의:
+# {
+#     "id": "output-1",
+#     "type": "OutputNode",
+#     "output": "agent_output",
+#     "params": {
+#         "wrap_template": "🤖 AI 답변:\n\n{answer}\n\n---\n질문: {user_input}",
+#         "inputs": {
+#             "answer": {"type": "reference", "value": "prompt-1_answer"},
+#             "user_input": {"type": "reference", "value": "input-1_user_input"}
+#         }
+#     }
+# }
+#
+# 실행 후 state["output-1_agent_output"] = "🤖 AI 답변:\n\n결과 텍스트\n\n---\n질문: ..."
 ```
 
 ### 새 노드 추가하기
@@ -1044,7 +1226,7 @@ pip install -e .
 
 ### 2. 환경 변수 설정
 
-`.env` 파일 생성 또는 환경 변수 export:
+`.env.local` 파일 생성 또는 환경 변수 export:
 
 ```bash
 export DATABASE_URL="postgresql+asyncpg://postgres:password@localhost:5432/ai_agent_db"
