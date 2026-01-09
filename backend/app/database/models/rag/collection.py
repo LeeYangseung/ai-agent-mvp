@@ -19,7 +19,7 @@ class Collection(Base):
         index=True,
     )
     name = Column(
-        String(255), nullable=False, unique=True, comment="컬렉션 이름"
+        String(255), nullable=False, comment="컬렉션 이름"
     )
     description = Column(String(500), nullable=True, comment="컬렉션 설명")
 

@@ -9,6 +9,7 @@ from alembic import context
 
 # Import all models for autogenerate to work properly
 from app.database.models.base import Base
+from app.database.models.rag.collection import Collection
 from app.database.models.rag.document import Document
 from app.database.models.rag.chunk import Chunk
 from app.database.models.graph.graph import Graph
